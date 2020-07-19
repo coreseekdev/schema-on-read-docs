@@ -1,0 +1,20 @@
+= How to build pdf
+:source-highlighter: rouge
+
+. install asciidoctor `sudo apt install asciidoctor`
+. create a Gemfile
+
+[source, ruby, indent=5]]
+----
+source 'https://rubygems.org'
+
+gem 'asciidoctor-pdf'
+gem 'pygments.rb'
+gem 'rouge'
+gem 'prawn', github: 'prawnpdf/prawn'
+gem 'prawn-table', github: 'prawnpdf/prawn-table'
+----
+
+[start=3]
+. build bundle `bundle --path=.bundle/gems`
+. test pdf generator `bundle exec asciidoctor-pdf -v`

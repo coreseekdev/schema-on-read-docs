@@ -1,0 +1,4 @@
+# Asciido build related.
+.bundle
+*.pdf
+Gemfile.lock

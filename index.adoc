@@ -1,0 +1,22 @@
+= Development Guide
+
+:Author:    nzinfo
+:Email:     <limn@coreseek.com>
+:Date:      2020/07/10
+:Revision:  0.2
+
+include::1-overview.adoc[]
+
+include::2-usage.adoc[]
+
+include::3-build.adoc[]
+
+include::4-indexing.adoc[]
+
+include::5-query.adoc[]
+
+include::6-schemaonread.adoc[]
+
+include::7-compressed-index.adoc[]   
+
+include::8-cluster.adoc[]

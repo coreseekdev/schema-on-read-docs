@@ -1,7 +1,0 @@
-= Manticore Internal Guide
-
-:Author:    nzinfo
-:Email:     <limn@coreseek.com>
-:Date:      2020/07/10
-:Revision:  0.2
-
