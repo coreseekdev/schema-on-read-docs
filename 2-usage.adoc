@@ -5,14 +5,14 @@
 
 在 Sphinx 中，系统主要由两个可执行模块构成。
 
-- indexer 从事先准备好的数据源获取数据构建索引。
-- searchd 提供搜索服务，以及实时接收数据更新的请求构建实时索引。
+* indexer 从事先准备好的数据源获取数据构建索引。
+* searchd 提供搜索服务，以及实时接收数据更新的请求构建实时索引。
 
 目前的实践中，indexer 的重要性在下降，大部分工作仅需要 searchd 即可完成。
 
 此外，还额外提供了索引检视工具
 
-- indextool 用于读取、导出索引的元数据。
+* indextool 用于读取、导出索引的元数据。
 
 === 2.1 配置 / Configure
 
@@ -68,13 +68,13 @@ searchd
 
 其中，除了 `searchd` 节之外，还需要额外配置
 
-- `indexer` ，用于控制 indexer 的行为，通常是限制 indexer 的内存占用等。
+* `indexer` ，用于控制 indexer 的行为，通常是限制 indexer 的内存占用等。
 
-- `source <name>` ，用于配置系统由何处，用何种方法读取数据。 Sphinx 支持从 MySQL、ODBC 数据库、CSV、XML 等数据源读取数据；coreseek 的版本还额外支持使用 Python 脚本读取数据
+* `source <name>` ，用于配置系统由何处，用何种方法读取数据。 Sphinx 支持从 MySQL、ODBC 数据库、CSV、XML 等数据源读取数据；coreseek 的版本还额外支持使用 Python 脚本读取数据
 
 WARNING: 由于使用 Python 脚本难以对 `indexer` 的内存占用进行控制，以及容易出现性能问题拖慢 indexer 的索引速度。因此除非特殊需求，不建议使用。实际上 coreseek 也关闭了基于 Manticore 版本的 `Python Data Source` 功能。
 
-- `index <name>` ，用于指明 index 的名称并配置属性（字段、属性名等），这里的索引如果没有给出类型，默认为 plain index，此时需要额外指定使用哪个 `source`；如果类型(`type`)为 `rt` 则无需指明 `source`。
+* `index <name>` ，用于指明 index 的名称并配置属性（字段、属性名等），这里的索引如果没有给出类型，默认为 plain index，此时需要额外指定使用哪个 `source`；如果类型(`type`)为 `rt` 则无需指明 `source`。
 
 
 1. 对于日志搜索，针对不需要修改的历史数据，应该作为 plain-index 构建，以获得更紧凑的索引文件和更好的性能；
@@ -122,9 +122,9 @@ Sphinx QL 是目前主流的 Sphinx 的使用方法，通过实现类似 MySQL �
 
 Manticore 额外提供了 HTTP 的数据访问接口，主要有两个 Endpoint
 
-- /sql 在不使用 MySQL 协议时，可以通过 REST 接口输入 Sphinx QL 查询，获得 JSON 编码过的查询结果
+* /sql 在不使用 MySQL 协议时，可以通过 REST 接口输入 Sphinx QL 查询，获得 JSON 编码过的查询结果
 
-- /json 可以批量对数据进行 增删改查，也支持对 Percolate Query 的访问与管理。
+* /json 可以批量对数据进行 增删改查，也支持对 Percolate Query 的访问与管理。
 
 理论上，使用 /json/bulk 接口可以获得更好的性能，因为无需进行 SQL 的语法解析。具体是否成立，需要进一步性能测试（构造 JSON 字符的性能损失不可忽略）。
 
