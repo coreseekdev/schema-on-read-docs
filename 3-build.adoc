@@ -1,0 +1,325 @@
+== 3. 从源码构建 / Build from Source
+
+=== 3.1 构建 / Build
+
+Manticore 支持多种操作系统，包括 Linux、FreeBSD、MacOS、Windows 等。
+
+考虑到系统的实际运行环境，下面以 Ubuntu 20.04LTS 为例，介绍如何从源码构建系统。
+
+下面假设工作的目录为 $(WSPACE)
+
+
+. git clone 或解压源码包到 $(WSPACE)/manticore
+
+. 将依赖的第三方源码包 复制到 $(WSPACE)/manticore_bundle， 包括
+
+    * galera-cmake-3.x-5.7.zip
+    * googletestmaster.zip
+    * icu4c-65_1-src.tgz
+    * libstemmer_c.tgz
+    * master.zip
+    * re2_master.zip
+
+TIP: 其中 master.zip 与 re2_master.zip 是一个文件
+
+[start=3]
+. 创建 编译使用的目录 $(WSPACE)/build
+
+. 确保编译所需的系统库存在
+
+[source, bash, indent=5]
+----
+sudo apt install build-essential libssl-dev libasio-dev \\
+    libboost-system-dev  libmysqlclient-dev flex bison libpcre3-dev \\
+    libzstd-dev 
+----
+
+   96  bash ../manticoresearch/coreseek.build.sh 
+   97  sudo apt install 
+   98  bash ../manticoresearch/coreseek.build.sh 
+   99  rm -rf *
+  100  bash ../manticoresearch/coreseek.build.sh 
+  101  ls
+  102  make  -j8
+  103  sudo apt install 
+  104  make  -j8
+  105  sudo apt install 
+  106  make  -j8f
+  107  make  -j8
+  108  history >init.env.cmd.txt
+
+=== 3.2 调试 / Debug
+
+=== 3.3 源码文件 / Files
+
+```
+├── README.md
+├── TESTING.md
+├── api
+│   ├── java
+│   ├── libsphinxclient
+│   ├── ruby
+│   ├── sphinxapi.py
+│   ├── test.php
+│   ├── test.py
+│   ├── test2.php
+│   └── test2.py
+├── cmake
+├── debian
+├── dist
+├── doc
+│   ├── Makefile.am
+│   ├── check.pl
+│   ├── indexer.1
+│   ├── indextool.1
+│   ├── internals-coding-standard.txt
+│   ├── internals-format-versions.txt
+│   ├── internals-index-format.txt
+│   ├── manpages.xml
+│   ├── searchd.1
+│   ├── spelldump.1
+│   ├── sphinx.txt
+│   └── wordbreaker.1
+├── docker-compose-test.yml
+├── docs
+├── libicu
+│   └── CMakeLists.txt
+├── libre2
+│   ├── CMakeLists.txt
+│   └── libre2.patch
+├── libstemmer_c
+│   ├── CMakeLists.txt
+│   └── README
+├── manticore.conf.in
+├── misc
+│   ├── ctest
+│   ├── dockerfiles
+│   ├── junit
+│   ├── manticore.natvis
+│   ├── manticore_lldb.py
+│   ├── raminfo.py
+│   ├── resolve.py
+│   ├── search_json_pretty.php
+│   ├── stopwords
+│   ├── suggest
+│   │   ├── README
+│   │   ├── suggest.conf
+│   │   └── suggest.php
+│   └── wordbreak.pl
+├── mysqlse
+│   ├── CMakeLists.txt
+│   ├── INSTALL
+│   ├── Makefile.am
+│   ├── gen_data.php
+│   ├── ha_sphinx.cc
+│   ├── ha_sphinx.h
+│   ├── make-patch.sh
+│   ├── plug.in
+│   ├── snippets_udf.cc
+│   ├── sphinx.5.0.22.diff
+│   ├── sphinx.5.0.27.diff
+│   ├── sphinx.5.0.37.diff
+│   └── sphinx.5.0.91.diff
+├── smoke.sh
+├── sphinxrev.cmake
+├── src
+│   ├── CMakeLists.txt
+│   ├── accumulator.h
+│   ├── attribute.cpp
+│   ├── attribute.h
+│   ├── charsets
+│   │   ├── cjk.txt
+│   │   ├── english.txt
+│   │   ├── globalaliases.h.in
+│   │   ├── non_cjk.txt
+│   │   └── russian.txt
+│   ├── coreseek
+│   │   ├── zmemorypool.cpp
+│   │   └── zmemorypool.h
+│   ├── datareader.cpp
+│   ├── datareader.h
+│   ├── ddl.l
+│   ├── ddl.y
+│   ├── docstore.cpp
+│   ├── docstore.h
+│   ├── event.h
+│   ├── fileutils.cpp
+│   ├── fileutils.h
+│   ├── global_idf.cpp
+│   ├── global_idf.h
+│   ├── gtests
+│   ├── http
+│   │   ├── http_parser.c
+│   │   └── http_parser.h
+│   ├── icu.cpp
+│   ├── icu.h
+│   ├── index_converter.cpp
+│   ├── indexcheck.cpp
+│   ├── indexcheck.h
+│   ├── indexer.cpp
+│   ├── indexformat.cpp
+│   ├── indexformat.h
+│   ├── indexsettings.cpp
+│   ├── indexsettings.h
+│   ├── indextool.cpp
+│   ├── json
+│   │   ├── cJSON.c
+│   │   └── cJSON.h
+│   ├── killlist.cpp
+│   ├── killlist.h
+│   ├── literal.h.in
+│   ├── loop_profiler.h
+│   ├── lz4
+│   │   ├── lz4.c
+│   │   ├── lz4.h
+│   │   ├── lz4hc.c
+│   │   └── lz4hc.h
+│   ├── net_action_accept.cpp
+│   ├── net_action_accept.h
+│   ├── netreceive_api.cpp
+│   ├── netreceive_api.h
+│   ├── netreceive_http.cpp
+│   ├── netreceive_http.h
+│   ├── netreceive_httpcommon.h
+│   ├── netreceive_https.cpp
+│   ├── netreceive_https.h
+│   ├── netreceive_ql.cpp
+│   ├── netreceive_ql.h
+│   ├── netstate_api.cpp
+│   ├── netstate_api.h
+│   ├── networking_daemon.cpp
+│   ├── networking_daemon.h
+│   ├── optional.h
+│   ├── replication
+│   │   ├── CMakeLists.txt
+│   │   ├── COPYING
+│   │   ├── README.md
+│   │   ├── wsrep.xcf
+│   │   ├── wsrep_api.h
+│   │   ├── wsrep_api_stub.h
+│   │   ├── wsrep_dummy.c
+│   │   ├── wsrep_gtid.c
+│   │   ├── wsrep_listener.c
+│   │   ├── wsrep_loader.c
+│   │   └── wsrep_uuid.c
+│   ├── reserved.py
+│   ├── searchd.cpp
+│   ├── searchdaemon.cpp
+│   ├── searchdaemon.h
+│   ├── searchdconfig.cpp
+│   ├── searchdconfig.h
+│   ├── searchdddl.cpp
+│   ├── searchdddl.h
+│   ├── searchdexpr.cpp
+│   ├── searchdexpr.h
+│   ├── searchdfields.cpp
+│   ├── searchdha.cpp
+│   ├── searchdha.h
+│   ├── searchdhttp.cpp
+│   ├── searchdreplication.cpp
+│   ├── searchdreplication.h
+│   ├── searchdsql.cpp
+│   ├── searchdsql.h
+│   ├── searchdssl.cpp
+│   ├── searchdssl.h
+│   ├── searchdtask.cpp
+│   ├── searchdtask.h
+│   ├── searchnode.cpp
+│   ├── searchnode.h
+│   ├── secondaryindex.cpp
+│   ├── secondaryindex.h
+│   ├── snippetfunctor.cpp
+│   ├── snippetfunctor.h
+│   ├── snippetindex.cpp
+│   ├── snippetindex.h
+│   ├── snippetstream.cpp
+│   ├── snippetstream.h
+│   ├── spelldump.cpp
+│   ├── sphinx.cpp
+│   ├── sphinx.h
+│   ├── sphinxaot.cpp
+│   ├── sphinxexcerpt.cpp
+│   ├── sphinxexcerpt.h
+│   ├── sphinxexpr.cpp
+│   ├── sphinxexpr.h
+│   ├── sphinxexpr.y
+│   ├── sphinxfilter.cpp
+│   ├── sphinxfilter.h
+│   ├── sphinxint.h
+│   ├── sphinxjson.cpp
+│   ├── sphinxjson.h
+│   ├── sphinxjson.l
+│   ├── sphinxjson.y
+│   ├── sphinxjsonquery.cpp
+│   ├── sphinxjsonquery.h
+│   ├── sphinxmetaphone.cpp
+│   ├── sphinxplugin.cpp
+│   ├── sphinxplugin.h
+│   ├── sphinxpq.cpp
+│   ├── sphinxpq.h
+│   ├── sphinxqcache.cpp
+│   ├── sphinxqcache.h
+│   ├── sphinxql.l
+│   ├── sphinxql.y
+│   ├── sphinxquery.cpp
+│   ├── sphinxquery.h
+│   ├── sphinxquery.y
+│   ├── sphinxrt.cpp
+│   ├── sphinxrt.h
+│   ├── sphinxsearch.cpp
+│   ├── sphinxsearch.h
+│   ├── sphinxselect.y
+│   ├── sphinxsort.cpp
+│   ├── sphinxsoundex.cpp
+│   ├── sphinxstd.cpp
+│   ├── sphinxstd.h
+│   ├── sphinxstem.h
+│   ├── sphinxstemar.cpp
+│   ├── sphinxstemcz.cpp
+│   ├── sphinxstemen.cpp
+│   ├── sphinxstemru.cpp
+│   ├── sphinxstemru.inl
+│   ├── sphinxudf.c
+│   ├── sphinxudf.h
+│   ├── sphinxutils.cpp
+│   ├── sphinxutils.h
+│   ├── sphinxversion.cpp
+│   ├── sphinxversion.h.in
+│   ├── taskflushattrs.cpp
+│   ├── taskflushattrs.h
+│   ├── taskflushbinlog.cpp
+│   ├── taskflushbinlog.h
+│   ├── taskflushmutable.cpp
+│   ├── taskflushmutable.h
+│   ├── taskglobalidf.cpp
+│   ├── taskglobalidf.h
+│   ├── taskmalloctrim.cpp
+│   ├── taskmalloctrim.h
+│   ├── taskoptimize.cpp
+│   ├── taskoptimize.h
+│   ├── taskping.cpp
+│   ├── taskping.h
+│   ├── taskpreread.cpp
+│   ├── taskpreread.h
+│   ├── tasksavestate.cpp
+│   ├── tasksavestate.h
+│   ├── testrt.conf.in
+│   ├── testrt.cpp
+│   ├── tests.cpp
+│   ├── threadutils.cpp
+│   ├── threadutils.h
+│   ├── udfexample.c
+│   └── wordbreaker.cpp
+└── test
+    ├ ...
+    ├── test_icu.conf
+    ├── test_odbc.conf
+    ├── test_re.conf
+    ├── ubertest.php
+    ├── ubertest.php.in
+    ├── valgrind.supp
+    └── wordforms.txt
+
+413 directories, 1545 files
+
+```

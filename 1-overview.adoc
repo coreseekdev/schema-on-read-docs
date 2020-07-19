@@ -1,0 +1,21 @@
+== Overview
+
+本文主要用于描述 Manticore / Sphinx 全文检索引擎的工作原理，便于开发人员迅速了解 Manticore / Sphinx 的架构与关键技术点。
+
+1. 本文不会事无巨细的介绍如何配置、使用，关于引擎的使用，请参考用户手册
+2. 本文不会涉及到 Manticore / Sphinx 系统的细节，而是围绕 *索引建立* 、*文档检索* 展开
+3. 特别的，本文介绍了 Coreseek 的定制功能， 读时模式 与 索引压缩，这两个特性主要是为半结构化数据分析设计的。
+
+
+具体来说，文本分三个部分：
+
+
+1. Manticore / Sphinx 的基本使用介绍
+2. Manticore / Sphinx 的开发入门
+3. Coreseek 定制的增强功能说明以及相关源代码说明
+4. 分布式索引与调度的一般实践
+
+为简化起见，下文混用 Sphinx 与 Manticore， 当出现 Sphinx 时表示这个特性是 Sphinx / Manticore 共有的，出现 Manticore 时表示这个特性是 Manticore 专有的。当提到 Coreseek 定制增强的功能时，会仅出现 Coreseek。
+
+仅限于本文中的内容，按功能分可以认为 Sphinx < Manticore < Coreseek。
+

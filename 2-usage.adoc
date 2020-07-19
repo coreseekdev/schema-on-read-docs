@@ -1,0 +1,231 @@
+== 2. 使用 / Usage
+
+
+此部分仅覆盖为后续进行代码说明所必须的细节，具体如何使用 Sphinx ，请参考 _link:https://docs.manticoresearch.com/latest/singlehtml/index.html[ManticoreSearch 使用手册]_ 。
+
+在 Sphinx 中，系统主要由两个可执行模块构成。
+
+- indexer 从事先准备好的数据源获取数据构建索引。
+- searchd 提供搜索服务，以及实时接收数据更新的请求构建实时索引。
+
+目前的实践中，indexer 的重要性在下降，大部分工作仅需要 searchd 即可完成。
+
+此外，还额外提供了索引检视工具
+
+- indextool 用于读取、导出索引的元数据。
+
+=== 2.1 配置 / Configure
+
+*indexer* 与 *searchd* 通过配置文件共享索引相关的知识。在新版本中，只需要如下的配置文件，即可启动搜索服务
+
+.sphinx.conf.in
+[source]
+----
+searchd
+{
+	listen			= 127.0.0.1:9312
+	listen			= 127.0.0.1:9306:mysql41
+	listen			= 127.0.0.1:9308:http
+	log				= @CONFDIR@/log/searchd.log
+	query_log		= @CONFDIR@/log/query.log
+	pid_file		= @CONFDIR@/log/searchd.pid
+	data_dir		= @CONFDIR@
+    query_log_format    = sphinxql
+}
+----
+
+    配置时需要将 `@CONFDIR` 替换为实际存放索引与日志文件的路径。
+
+Sphinx 早期的配置文件格式如下：
+
+.test_icu.conf
+[source]
+----
+indexer
+{
+	mem_limit = 16M
+}
+
+source test
+{
+	type 			= xmlpipe2
+	xmlpipe_command	=
+}
+
+index test
+{
+	source			= test
+	path			= data/test
+	morphology		= icu_chinese
+}
+
+searchd
+{
+    ... // 略
+}
+
+----
+
+其中，除了 `searchd` 节之外，还需要额外配置
+
+- `indexer` ，用于控制 indexer 的行为，通常是限制 indexer 的内存占用等。
+
+- `source <name>` ，用于配置系统由何处，用何种方法读取数据。 Sphinx 支持从 MySQL、ODBC 数据库、CSV、XML 等数据源读取数据；coreseek 的版本还额外支持使用 Python 脚本读取数据
+
+WARNING: 由于使用 Python 脚本难以对 `indexer` 的内存占用进行控制，以及容易出现性能问题拖慢 indexer 的索引速度。因此除非特殊需求，不建议使用。实际上 coreseek 也关闭了基于 Manticore 版本的 `Python Data Source` 功能。
+
+- `index <name>` ，用于指明 index 的名称并配置属性（字段、属性名等），这里的索引如果没有给出类型，默认为 plain index，此时需要额外指定使用哪个 `source`；如果类型(`type`)为 `rt` 则无需指明 `source`。
+
+
+1. 对于日志搜索，针对不需要修改的历史数据，应该作为 plain-index 构建，以获得更紧凑的索引文件和更好的性能；
+2. 如果对一个 Plain-Index 在 SphinxQL 接口中调用 insert ，则会自动转为 RT-Index
+3. `searchd` 在 data_dir 中记录 RT-Index 的元/Meta信息，与写入数据的 binlog 
+
+TIP: Sphinx 提供了定义索引的诸多选项，诸如如何处理 CJK，最小词长度，属性（用于条件过滤的数据）的数据类型，字段（用于全文索引的数据）等。请务必参阅 _使用手册_ 。
+
+=== 2.2 使用搜索 / Search
+
+==== 2.2.1 Client API
+
+在早期 Sphinx 主要是为了增强 MySQL 数据库全文检索能力提供的外部服务，在那个时间点（2001~2014）PHP 是主要的 Web 开发语言。这导致了Sphinx API 是主要使用 PHP 开发的。
+
+Client API 通过 Raw Socket 与 `searchd` 通信，API Client 发送 Sphinx Query Expr 表达式的查询请求，Searchd 将结果集用二进制编码返回给 API Client。
+
+目前，使用 API 访问 `searchd` 的方式已不被推荐。这个组件仍然存在的原因是 
+
+1. 多个 `searchd` 组成集群时，即 分布式索引 / dist-index 的情况下，这个协议用于节点与节点之间传输数据。
+
+2. Sphinx SE 组件也使用 Client API 的 protocol 实现 MySQL 服务器与 `searchd` 的通信
+
+==== 2.2.2 MySQL SE 
+
+在 Sphinx QL 实现的不完整的阶段，`searchd` 提供了 MySQL SE 的访问方式（SE, Storage Engine)。 在此种模式下，应用程序可以通过连接到配置了 MySQL SE 扩展的 MySQL 数据库服务器（需要数据库版本为 5.x 以上版本）访问 Sphinx。
+
+1. MySQL SE 并不在 MySQL 服务器端存储数据，实际的数据仍然在 Sphinx 服务器上。
+2. 可以通过 MySQL SE 插入新数据，但是不推荐
+3. MySQL SE 通常用作对于结果集还需要进行后处理的场景，如 Lookup
+4. MySQL SE 内置了高亮的逻辑，可以用于扩展、改善 Sphinx 的检索结果集高亮性能不足的问题。
+
+==== 2.2.3 Sphinx QL / MySQL Protocol
+
+Sphinx QL 是目前主流的 Sphinx 的使用方法，通过实现类似 MySQL 的协议访问与控制 `searchd` 节点。
+
+通过 Sphinx QL ，可以
+
+1. 集群管理（加入集群、更新节点列表）
+2. 索引管理（创建索引、卸载索引、刷新索引）
+3. 插入数据到索引
+4. 执行普通查询
+5. 执行 滴滤 / Percolate 查询（关于  Percolate Query 在 5-query 中有进一步解释）
+
+==== 2.2.4 HTTP API
+
+Manticore 额外提供了 HTTP 的数据访问接口，主要有两个 Endpoint
+
+- /sql 在不使用 MySQL 协议时，可以通过 REST 接口输入 Sphinx QL 查询，获得 JSON 编码过的查询结果
+
+- /json 可以批量对数据进行 增删改查，也支持对 Percolate Query 的访问与管理。
+
+理论上，使用 /json/bulk 接口可以获得更好的性能，因为无需进行 SQL 的语法解析。具体是否成立，需要进一步性能测试（构造 JSON 字符的性能损失不可忽略）。
+
+==== 2.2.5 查询表达式 / QueryExpr
+
+除了 HTTP API 使用了某种特殊的查询表达式之外（在 5-query 中，可以看到是类似 介于 query 和 query AST 的中间状态）。其他的访问方式均需要使用 Query Expr 来表达查询。
+
+由于历史原因，Sphinx 提供了多种匹配模式，如 `SPH_MATCH_ALL`, `SPH_MATCH_ANY`,`SPH_MATCH_PHRASE`, `SPH_MATCH_BOOLEAN` 等，系统目前默认的是 `SPH_MATCH_EXTENDED`。
+
+以下列出 `SPH_MATCH_EXTENDED` 查询支持的功能，具体用法参阅手册。
+
+* A 或 B 存在一个即可
+
+	** A | B
+
+* 存在 A 且不存在 B
+
+	** A -B
+	** A   !B
+
+* 查询要求可以分组在一起
+	** （A B)
+
+* 可能有B，但是没有也可以
+* 指定检索的全文检索字段
+* 指定在文中出现的范围
+* 完整匹配短语
+* 在一个特定大小的窗口同时出现
+* 关键词的命中数达到某个阈值
+* 严格限制关键词出现的顺序
+* 必须精确匹配关键词
+* 必须出现在全文检索字段的开头或结束
+* 强制提升某个关键词的权重
+* 允许间隔特定数量词
+* 关键词必须出现在同一个句子中
+* 关键词必须出现在同一个段落中
+* 两个关键词的间隔必须大于特定数量的词
+* 查询中，如果某个字段不存在于Schema 也可以不报错。
+
+
+==== 2.2.6 排序表达式 / RankExpr
+
+对于搜索引擎来说，找出文档后续的工作是如何决定文档之间的顺序。 一个典型的方法是设计一个文档权重公式，根据文档上下文和其他信息，计算文档权重，根据算出的文档权重进行排序。
+
+Manticore 提供了可以灵活配置的计算文档权重方法，称之为 `ranker`。
+
+由于历史原因，Manticore 提供了多种默认的 `Ranker`
+
+* SPH_RANK_PROXIMITY_BM25， 这也是默认的排序方式
+* SPH_RANK_BM25
+* SPH_RANK_NONE，对于日志检索（使用时间排序），可以使用这个 ranker 以最大化性能。
+* SPH_RANK_WORDCOUNT
+* SPH_RANK_PROXIMITY 
+* SPH_RANK_MATCHANY 
+* SPH_RANK_FIELDMASK 
+* SPH_RANK_SPH04 
+* SPH_RANK_EXPR 如果需要调优检索结果可以通过定制这个表达式进行。
+
+进一步的，排序可以使用多种预制的排序因子，通过定制 SPH_RANK_EXPR 可以模拟出 前面提到的全部的 `ranker`。
+
+==== 2.2.7 字段表达式 / Eval
+
+除了预制好的属性外，Sphinx 还支持用户在搜索表达式中通过提供计算表达式，实现自定义字段的功能。
+
+* 表达方法与SQL语句中的 UDF 类似
+* 计算表达式可以参与 
+
+	** 取值
+	** 过滤
+	** 排序
+* 可以通过此机制调试 `ranker` 的各因子
+
+具体使用请参阅使用手册。
+
+需要注意：
+
+1. Schema On Read 机制依赖可计算字段表达式提供的代码框架，后面在解析 Schema On Read 时，会详细解释
+2. ManticoreSearch 提供了函数 REGEX 与 Schema On Read 不同，这个函数只能提供是否命中的信息，无法进一步对数据进行处理。
+
+
+==== 2.2.8 排序表达式 / Sorter
+
+Sphinx 预制了多种排序方式，以及也允许用户通过表达式自定义排序算法。
+
+* SPH_SORT_RELEVANCE mode, that sorts by relevance in descending order (best matches first);
+* SPH_SORT_ATTR_DESC mode, that sorts by an attribute in descending order (bigger attribute values first);
+* SPH_SORT_ATTR_ASC mode, that sorts by an attribute in ascending order (smaller attribute values first);
+* SPH_SORT_TIME_SEGMENTS mode, that sorts by time segments (last hour/day/week/month) in descending order, and then by relevance in descending order;
+* SPH_SORT_EXTENDED mode, that sorts by SQL-like combination of columns in ASC/DESC order;
+* SPH_SORT_EXPR mode, that sorts by an arithmetic expression.
+
+其中，后面可能需要关注的是 模式 SPH_SORT_TIME_SEGMENTS ，其以当前时间为基础，按
+
+- last hour,
+- last day,
+- last week,
+- last month,
+- last 3 months,
+- everything else.
+
+对数据进行分段，也许对日志检索有些许助益。
+
+`SPH_SORT_EXTENDED` 类似 SQL , 可以对多个要素设定排序的优先级
+`SPH_SORT_EXTENDED` 与 `ranker` 的工作方式类似。  
