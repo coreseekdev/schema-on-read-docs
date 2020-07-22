@@ -6,12 +6,12 @@ Manticore 支持多种操作系统，包括 Linux、FreeBSD、MacOS、Windows �
 
 考虑到系统的实际运行环境，下面以 Ubuntu 20.04LTS 为例，介绍如何从源码构建系统。
 
-下面假设工作的目录为 $(WSPACE)
+下面假设工作的目录为 `$(WSPACE)`
 
 
-. git clone 或解压源码包到 $(WSPACE)/manticore
+. git clone 或解压源码包到 `$(WSPACE)/manticoresearch`
 
-. 将依赖的第三方源码包 复制到 $(WSPACE)/manticore_bundle， 包括
+. 将依赖的第三方源码包 复制到 `$(WSPACE)/manticore_bundle`， 包括
 
     * galera-cmake-3.x-5.7.zip
     * googletestmaster.zip
@@ -23,32 +23,39 @@ Manticore 支持多种操作系统，包括 Linux、FreeBSD、MacOS、Windows �
 TIP: 其中 master.zip 与 re2_master.zip 是一个文件
 
 [start=3]
-. 创建 编译使用的目录 $(WSPACE)/build
+. 创建 编译使用的目录 `mkdir -p $(WSPACE)/build && cd $(WSPACE)/build`
 
 . 确保编译所需的系统库存在
 
 [source, bash, indent=5]
 ----
-sudo apt install build-essential libssl-dev libasio-dev \\
-    libboost-system-dev  libmysqlclient-dev flex bison libpcre3-dev \\
+sudo apt install build-essential libssl-dev libasio-dev \
+    libboost-system-dev  libmysqlclient-dev flex bison libpcre3-dev \
     libzstd-dev 
 ----
 
-   96  bash ../manticoresearch/coreseek.build.sh 
-   97  sudo apt install 
-   98  bash ../manticoresearch/coreseek.build.sh 
-   99  rm -rf *
-  100  bash ../manticoresearch/coreseek.build.sh 
-  101  ls
-  102  make  -j8
-  103  sudo apt install 
-  104  make  -j8
-  105  sudo apt install 
-  106  make  -j8f
-  107  make  -j8
-  108  history >init.env.cmd.txt
+[start=5]
+. 构建
+
+[source, bash, indent=5]
+----
+cmake ../manticoresearch -DLIBS_BUNDLE=../manticore_bundle \
+-DWITH_ICONV=OFF -DWITH_RE2=1 -DWITH_MYSQL=1 \
+-DCMAKE_BUILD_TYPE=DEBUG \
+-DCMAKE_CXX_FLAGS="-Wno-error=stringop-truncation -Wno-error=deprecated-copy"
+----
+
+TIP: 以上命令编译出来是调试版本的，如果是发行版本，应该用 `-DCMAKE_BUILD_TYPE=Release` 或 `-DCMAKE_BUILD_TYPE=RelWithDebInfo`
+
+TIPS: 这个配置中，关闭了 ICONV，启用了 RE2，启用了 MySQL DataSource
 
 === 3.2 调试 / Debug
+
+为了调试 Sphinx, 应使用 Debug 或 RelWithDebInfo 进行构建。
+
+Sphinx 采用了多线架构（历史上是多进程，但是目前版本已经默认是多现成），而且其使用由 master 进程的 Fork 的 worker进程来对外提供服务，默认情况下，直接使用 gdb 将挂在到 worker 进程导致端点失效。
+
+对于大部分场景不需要调试 Sphinx 有关并发的逻辑，此时需要在启动 `searchd` 时额外提供 `--console` 参数，在此模式下， master 进程将不会 fork worker 进程，转而自行对外提供服务。
 
 === 3.3 源码文件 / Files
 
@@ -68,18 +75,6 @@ sudo apt install build-essential libssl-dev libasio-dev \\
 ├── debian
 ├── dist
 ├── doc
-│   ├── Makefile.am
-│   ├── check.pl
-│   ├── indexer.1
-│   ├── indextool.1
-│   ├── internals-coding-standard.txt
-│   ├── internals-format-versions.txt
-│   ├── internals-index-format.txt
-│   ├── manpages.xml
-│   ├── searchd.1
-│   ├── spelldump.1
-│   ├── sphinx.txt
-│   └── wordbreaker.1
 ├── docker-compose-test.yml
 ├── docs
 ├── libicu
@@ -323,3 +318,95 @@ sudo apt install build-essential libssl-dev libasio-dev \\
 413 directories, 1545 files
 
 ```
+
+Coreseek / Manticore 中提供了如下的源码文件/目录，具体用途如下（一些约定俗成，通过名字可知的文件略过）：
+
+[%header,cols="1,5"] 
+|===
+|目录
+|用途
+
+|api
+| API 模式访问 Sphinx 客户端库 
+
+|cmake
+| cmake 构建用到的文件
+
+|debian
+| 作为 deb 包 要求存在的文件
+
+|dist
+| 构造 deb 和 rpm 包依赖的其他文件
+
+|doc
+| 构建文档所需要的工具
+
+|docs
+| 实际文档的原始文件
+
+|libicu
+| libicu 的 cmake 构建文件
+
+|libre2
+| libre2 的 cmake 构建文件
+
+|libstremmer_c
+| libstremmer_c 的 cmake 构建文件
+
+|misc
+| 其他杂项文件，包括 停止词、lldb 的适配、docker、natvis 的配置、stopword，搜索建议功能的演示配置等
+
+|mysqlse
+| MySql SE 的接口文件，用于作为存储引擎与 MySQL集成
+
+|src
+| 主体源代码
+
+|src/charsets
+| 预制的字符集, cjk，英文, 俄文
+
+|src/coreseek
+| 支持 spdz 所需要的文件，基于 zstd 的内存池访问机制
+
+|src/http
+| http api 依赖的文件
+
+|src/json
+| 处理 json 解析
+
+|src/lz4
+| lz4 算法，用于 docstore 压缩
+
+|src/replication
+| 多主的复制机制，基于 galera
+
+|test
+| 单元测试
+|===
+
+在源代码目录中，与 Schema On Read 和 索引压缩相关的文件用途说明如下。
+
+[%header,cols="1,5"] 
+|===
+|文件
+|用途
+
+|sphinxint.h
+|Cell in column 2, row 1
+
+|sphinx.h
+|Cell in column 2, row 1
+
+|sphinx.cpp
+|Cell in column 2, row 1
+
+|sphinxutils.*
+|Cell in column 2, row 1
+
+|sphinxexpr.*
+|Cell in column 2, row 1
+
+|searchdexpr.*
+|Cell in column 2, row 1
+
+|===
