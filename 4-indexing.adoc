@@ -1,4 +1,47 @@
-== Plain Index
+:sourcedir: ../manticoresearch/src
+:source-highlighter: pygments
+:mermaid-puppeteer-config: config/puppeteer-config.json
 
-== Realtime Index / RT-Index
+== 4. 索引构建
+
+曾经，索引需要使用 `indexer` 构造， `searchd` 用于提供服务。为了适应这个模式，出现了 主/Main + 增量/Delta 的索引构建方式，并且针对删除主索引数据的常见提供了 KillList 机制。
+
+> 在 KillList 模式中，如果需要删除 Main 索引中的数据，需要在 KillList 中给出要删除文档的 DocID；相应的，如果在 Delta 索引中 出现了同样 的 DocID 则这种行为定义为更新，反之为删除。
+
+具体针对 `indexer` 这个模块，对外主要提供以下功能：
+
+. 从数据源中读取数据（eg. CSV、TSV、XML、MySQL、MSSQL、ODBC），根据在配置文件中配置好的 Schema 构建索引;
+. 索引合并，将两个索引合并到一个
+. 索引更新，从数据源构造一个新索引，并通知正在对外提供服务的 `searchd` 更新
+
+> 索引更新机制是通过将新构造的索引复制到指定位置之后，发送 Signal 到 searchd 实现的。
+
+=== Plain Index
+
+以 XML 数据源为例，跟踪构建索引的过程。
+
+1. SpawnSourceXMLPipe 从配置文件中构造指定的数据源 CSphSource
+
+[source,c++]
+[%autofit]
+----
+include::{sourcedir}/indexer.cpp[lines=769..800]
+----
+
+CSphSource_Document 的数据源接口
+
+数据源的继承关系
+
+=== Realtime Index / RT-Index
+
+[plantuml, diagram-classes, png]
+----
+@startuml
+top to bottom direction
+
+include::diagrams/datasource.mmd[]
+@enduml
+----     
+
+
 

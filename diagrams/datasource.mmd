@@ -1,0 +1,49 @@
+BlobSource_i <|.. CSphSource : Realization
+CSphSourceSettings <|-- CSphSource : Inheritance
+CSphSource <|-- CSphSource_Document : Inheritance
+CSphSource_Document <|-- CSphSource_BaseSV 
+CSphSource_Document <|-- CSphSource_StringVector 
+CSphSource_BaseSV <|-- CSphSource_CSV 
+CSphSource_BaseSV <|-- CSphSource_TSV 
+CSphSource_Document <|-- CSphSource_XMLPipe2 
+CSphMatch .. CSphSource_Document 
+
+interface BlobSource_i{
+	+GetFieldMVA()
+	+GetStrAttr()
+}
+
+class CSphSource{
+	+ Setup()
+	+ Connect()
+	+ Disconnect()
+	+ IterateStart()
+	+ IterateDocument()
+	+ IterateHits() 
+	+ IterateJoinedHits()
+	+ IterateMultivaluedStart()
+	+ IterateMultivaluedNext()
+	+ GetDocFields()
+	+ IterateKillListStart()
+	+ IterateKillListNext()
+	+ PostIndex()
+}
+
+class CSphMatch{
+	+ m_tRowID
+	+ m_pStatic
+	+ m_pDynamic
+}
+
+class CSphSource_Document{
+	+ BuildHits()
+	+ NextDocument()
+	# BuildZoneHits()
+	# BuildSubstringHits()
+	# BuildRegularHits()
+	# AllocDocinfo()
+}
+
+class CSphSource_BaseSV
+class CSphSource_XMLPipe2
+class CSphSource_StringVector

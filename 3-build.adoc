@@ -49,6 +49,22 @@ TIP: 以上命令编译出来是调试版本的，如果是发行版本，应该
 
 TIPS: 这个配置中，关闭了 ICONV，启用了 RE2，启用了 MySQL DataSource
 
+=== 3.1.1 为 Windows 构建 / Build for Windows
+
+. Windows 上需要手动安装 Python3 和 Git
+. 需要 bison 和 flex，目前无法在 Windows 上生成正确的 c 文件，需要在 Linux 上生成完毕后再到 Windows 上构造；另外一个可选方式是通过 https://github.com/lexxmark/winflexbison 未测试。
+. 需要 VC BuildTools， 2019 版本已经自带 Cmake
+. 执行构建指令
+
+[source, bash, indent=5]
+----
+cmake ../manticoresearch -DLIBS_BUNDLE=../manticore_bundle \
+-DWITH_ICONV=OFF -DWITH_RE2=1 -DWITH_MYSQL=0 \
+-DCMAKE_BUILD_TYPE=DEBUG
+----
+
+假设 Windows 版本放弃 MySQL 支持，如果启用需要额外配置 MySQL Client 的库。
+
 === 3.2 调试 / Debug
 
 为了调试 Sphinx, 应使用 Debug 或 RelWithDebInfo 进行构建。
@@ -56,6 +72,10 @@ TIPS: 这个配置中，关闭了 ICONV，启用了 RE2，启用了 MySQL DataSo
 Sphinx 采用了多线架构（历史上是多进程，但是目前版本已经默认是多现成），而且其使用由 master 进程的 Fork 的 worker进程来对外提供服务，默认情况下，直接使用 gdb 将挂在到 worker 进程导致端点失效。
 
 对于大部分场景不需要调试 Sphinx 有关并发的逻辑，此时需要在启动 `searchd` 时额外提供 `--console` 参数，在此模式下， master 进程将不会 fork worker 进程，转而自行对外提供服务。
+
+
+> 推荐使用 SourceTrail 阅读代码 ，需要增加 cmake 参数  `-DCMAKE_EXPORT_COMPILE_COMMANDS=1 -G Ninja`
+
 
 === 3.3 源码文件 / Files
 

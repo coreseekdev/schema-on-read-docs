@@ -2,3 +2,4 @@
 .bundle
 *.pdf
 Gemfile.lock
+.asciidoctor
