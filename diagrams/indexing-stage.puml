@@ -1,0 +1,33 @@
+@startuml
+
+[*] --> Prepare 
+Prepare --> Indexing : Setup
+Prepare : Update Config
+Prepare : Update Schema
+
+state Indexing {
+  [*] --> Connected : Connect
+  Connected -right-> IterateDocument : IterateStart
+  IterateDocument -up-> IterateHits 
+  IterateHits --> IterateDocument 
+  IterateDocument --> IterateDocument
+  IterateDocument --> [*] : Disconnect
+}
+
+state HasJoinedFields <<choice>> 
+Indexing -right-> HasJoinedFields
+
+HasJoinedFields -right-> JoinIndexing : [HasJoined]
+
+state JoinIndexing {
+    [*] --> IterateJoinedHits : Connect
+    IterateJoinedHits --> IterateMultivalued
+    IterateMultivalued -> [*] : Disconnect
+}
+
+HasJoinedFields --> KillList
+JoinIndexing --> KillList
+KillList -left-> PostIndex
+PostIndex -left-> [*]
+
+@enduml

@@ -1,0 +1,67 @@
+@startuml
+left to right direction
+
+ISphKeywordsStat <|-- CSphIndex
+DocstoreReader_i <|-- CSphIndex
+IndexSegment_c <|-- CSphIndex
+
+IndexUpdateHelper_c <|-- CSphIndex_VLN
+IndexAlterHelper_c <|-- CSphIndex_VLN
+DebugCheckHelper_c <|-- CSphIndex_VLN
+
+ISphBinlog <|-- RtBinlog_c
+
+CSphIndex <|-- CSphIndex_VLN
+
+RtBinlog_c .. CSphIndex_VLN 
+CSphIndex <|-- RtIndex_i
+RtIndex_i <|-- RtIndex_c
+IndexSegment_c <|-- RtSegment_t
+
+RtAccum_t .. RtIndex_i
+RtAccum_t .. RtSegment_t 
+CSphIndex --o ServedDesc_t
+
+ServedDesc_t .. Searchd
+
+interface ISphKeywordsStat{
+	+FillKeywords()
+}
+
+interface DocstoreReader_i{
+	+GetDoc()
+}
+
+interface IndexSegment_c{
+	+Kill(DocId)
+}
+
+interface IndexUpdateHelper_c{
+    +Update_Blobs()
+}
+
+interface IndexAlterHelper_c{
+    +Alter_AddRemoveAttr()
+}
+
+interface DebugCheckHelper_c
+interface ISphBinlog
+interface RtIndex_i
+
+class CSphIndex{
+    +Build()
+    +Merge()
+    +MultiQueryEx()
+    +ExplainQuery()
+    +UpdateAttributes() 
+}
+
+class RtBinlog_c{
+    +BinlogCommit()
+    +Replay()
+}
+
+'class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
+
+
+@enduml

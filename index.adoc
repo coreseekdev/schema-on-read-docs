@@ -1,4 +1,4 @@
-= Development Guide
+= Coreseek Development Guide
 
 :Author:    nzinfo
 :Email:     <limn@coreseek.com>

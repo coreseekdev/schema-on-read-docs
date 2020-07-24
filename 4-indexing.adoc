@@ -1,5 +1,5 @@
 :sourcedir: ../manticoresearch/src
-:source-highlighter: pygments
+:source-highlighter: rouge
 :mermaid-puppeteer-config: config/puppeteer-config.json
 
 == 4. 索引构建
@@ -16,25 +16,22 @@
 
 > 索引更新机制是通过将新构造的索引复制到指定位置之后，发送 Signal 到 searchd 实现的。
 
-=== Plain Index
+=== 普通索引 / Plain Index
 
 以 XML 数据源为例，跟踪构建索引的过程。
 
 1. SpawnSourceXMLPipe 从配置文件中构造指定的数据源 CSphSource
 
 [source,c++]
-[%autofit]
 ----
 include::{sourcedir}/indexer.cpp[lines=769..800]
 ----
+[.text-center]
+表 4-1：创建 XML2 数据源的代码片段
 
-CSphSource_Document 的数据源接口
+在代码中，CSphSource 实际上是一个抽象的基础类。在 Manticore 未修改的代码中，与 数据源相关的类的关联关系如下。
 
-数据源的继承关系
-
-=== Realtime Index / RT-Index
-
-[plantuml, diagram-classes, png]
+[plantuml, diagram-datasource, png]
 ----
 @startuml
 top to bottom direction
@@ -42,6 +39,56 @@ top to bottom direction
 include::diagrams/datasource.mmd[]
 @enduml
 ----     
+[.text-center]
+图 4-1： 数据源相关的类的继承关系
 
+其中
 
+- StringVector 与 PercolateIndex 有关
+- BaseSV 是 CSV(Comma Separated Value) 和 TSV 的基础类， 可忽略
+- CSphSourceSettings 是与数据源有关的配置信息，对应到配置文件的 `[source]` 节，一般可忽略
+- CSphMatch 记录了文档的实际内存中的属性组织形式(索引构建时、运行时)，在后面 SchemaOnRead 特性也依赖这个结构
+
+从 XMLPipe2 向上回溯继承关系，`XMLPipe2 -> Document -> CSphSource -> BlobSource_i` ，其中核心在 `CSphSource` 其各接口隐含的指出了索引构建的各流程。
+
+[plantuml, diagram-indexstage, png]
+----
+include::diagrams/indexing-stage.puml[]
+----     
+[.text-center]
+图 4-2： 构造索引的流程
+
+宏观上看，索引构建分两个主要阶段： `Indexing`， `JoinIndex`。这里的 JoinIndex 是为了适应 SQL 数据库的妥协。在实际数据模式中，存在 Master / Detail 作为典型的模式，例如 订单。在上面的模式中，全文检索的最小单位是订单本身而不是具体的订单条目。如果使用典型的搜索引擎拉大表的方法，则意味着每个订单条目一个索引项，按订单进行检索时只能按属性再进行聚合，会降低检索的性能。
+
+对于 Join 型的子表数据，按数据类型分，可分为 JoinField（文本），JoinMVA（数值）， 目前 JoinMVA 仅支持 Int /32bit，BigInt/64bit，如果需要处理其他类型需要先转换为 Int 后进行处理。
+
+具体到 `Indexing` 阶段 , 驱动 CSphSource 的代码（具体为 `CSphIndex_VLN::Build`）通过反复调用 `IterateDocument` 确定是否将待索引的文档读取完毕，如果仍然有新文档，则继续读取文档中的 Hits 以及 属性信息 `DocInfo:CSphMatch`。
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=11233..11279]
+----
+[.text-center]
+表 4-2：构造 Plain Index 代码片段 `CSphIndex_VLN::Build`
+
+=== 实时索引 / Realtime Index / RT-Index
+
+Realtime Index 是 Sphinx 提供的实时索引，在 Sphinx 阶段需要通过 SphinxQL，即通过模拟 MySQL 协议访问 `searchd`。
+
+[plantuml, diagram-rtindex, png]
+----
+include::diagrams/rt-index.puml[]
+----     
+[.text-center]
+图 4-3： 索引之间的关系
+
+对外，`searchd` 通过 `ServedDesc_t` 管理索引，这个索引可以是 `CSphinx_VLN` 即前面提到的 `Plain Index`（VLN, Variant Length Number 一种常见的倒排表压缩算法），也可以是 `RTIndex_c`。 
+
+对索引的修改（Insert & Update)  会在内存中生成一个 `RtSegment_t`，并记录到 `RtBingLog_c` 中。
+
+内存中多个 `RtSegment_t` 达到阈值后，会合并为一个 `RtSegment_t` 以提升检索性能。
+
+`searchd` 工作在线程模式，每个线程对应唯一一个 `RtAccum_t` ，也即对应唯一一个 Index。
+
+如果对一个 `plain index` 进行插入操作， `searchd` 会将这个索引的元信息修改为 `rt-index`，然后利用 `rt-index` 的机制记录修改过的索引。 
 
