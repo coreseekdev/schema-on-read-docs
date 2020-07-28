@@ -1,13 +1,96 @@
-== Query Parser
+:sourcedir: ../manticoresearch/src
+:source-highlighter: rouge
+:mermaid-puppeteer-config: config/puppeteer-config.json
 
-== SphinxQL Parser
+== 5. 查询 / Query 
 
-== Query Processing
+前面已经初步考察过 Sphinx 建立索引的流程和相应的主要的索引文件结构，本部分介绍在查询过程中的数据处理流程。
 
-== Eval
+=== 5.1 SphinxQL 解析器 / SphinxQL Parser
 
-== Ranking
+Sphinx 基于 Bison / Flex 工具链定义解析器，与 SphinxQL 相关的源文件有
 
-== Sorting
+* searchdsql.{h|cpp} ,       实际调用解析器，构建查询抽象句法树，入口为 `sphParseSqlQuery`，返回解析好的 `SqlStmt_t` 数组
 
-== Percolate Query
+* sphinxql.l ,               词法规则，将文本识别为 Token   
+
+* sphinxql.y ,               语法规则，将 Token 序列 构建为句法树。
+* sphinxselect.y ,           Select 语句的语法规则
+* ddl.{l|y} ,              创建、修改索引等 语句的语法规则
+
+
+`SqlStmt_t` 在目前的版本中，实际是多种 SQL 语句的复合，根据代码中的说明，也许后续会对其进行拆分。
+
+[source,c++]
+----
+include::{sourcedir}/searchdsql.h[lines=162..187]
+----
+[.text-center]
+表 5-1：`SqlStmt_t` 的定义（片段）
+
+. 代码中的 `m_pTableFunc`、`m_sTableFunc`、`m_dTableFuncArgs` 均与 Table Function 有关， Table function 是一类工作在结果集上的函数，目前仅存在预制函数  `REMOVE_REPEATS`，从接口的定义看，Table Function 后续可能出现较大改动。
+. 结构体承载的语句 `SELECT, INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX, UPDATE, CREATE/DROP`
+. 具体针对 SELECT 实际的数据均包括在结构 `m_tQuery:CSphQuery` 中
+. 进一步，SELECT 语句的实际解析由 `SelectParser_t` 在 `ParseSearchQuery` 中进行。
+
+=== 5.2 查询解析器 / Query Parser 
+
+与 SphinxQL 类似， Query Parser 也是基于 Bison / Flex 工具链。Query Parser 同时被 SphinxQL 和传统的 API 访问方式所使用。
+
+* sphinxexpr.y ,    用户自定义表达式的支持
+* sphinxquery.y ，  全文检索的查询表达式进行解析
+
+. 在查询的过程中，可以自定义表达式，使用表达式计算后的值，在解析层面，通过 `sphExprParse` 构造 `ISphExpr` 给与支持
+. SphinxQL 也应用了 `ISphExpr` 机制，以支持基于自定义表达式的字段
+. sphinxquery.y 通过 `XQParser_t` 提供了对 Sphinx Extend Query 查询表达式的支持。
+
+综合而言，一个 SphinxQL 的 Select 查询，会经过 `sphParseSqlQuery -> ParseSearchQuery -> sphExprParse -> sphParseExtendedQuery` 完成整个解析过程。
+
+其中 `sphParseExtendedQuery` 可以将查询构造、改写为 类 Lisp 的 S 表达式形式，与 Splunk 的 实现机制类似。
+
+[source,c++]
+----
+include::{sourcedir}/sphinxquery.cpp[lines=18..40]
+----
+[.text-center] 
+表 5-2：调试开关
+
+通过开启 `XQDEBUG` 可以对查询表达式的解析过程进行调试。
+
+此外，针对 JSON 还有对应的解析器，此处略。
+
+=== 5.3 查询的处理过程 / Query Processing
+
+
+		case STMT_SELECT:
+			{
+				MEMORY ( MEM_SQL_SELECT );
+
+				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );
+				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
+				dStmt.Begin()->m_pTableFunc = nullptr;
+
+				if ( m_tVars.m_bProfile )
+					tHandler.SetProfile ( &m_tProfile );
+				if ( m_bFederatedUser )
+					tHandler.SetFederatedUser();
+
+				if ( HandleMysqlSelect ( tOut, tHandler ) )
+				{
+					// query just completed ok; reset out error message
+					m_sError = "";
+					AggrResult_t & tLast = tHandler.m_dResults.Last();
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.m_bProfile ? &m_tProfile : nullptr ) );
+				}
+
+				// save meta for SHOW META (profile is saved elsewhere)
+				m_tLastMeta = tHandler.m_dResults.Last();
+				return true;
+			}
+
+=== 5.4 自定义计算任务 / Eval & UDF
+
+=== 5.5 检索过滤 / Percolate Query
+
+ES 也有 Percolate Query

@@ -1,2 +1,2 @@
-== Schema on Read
+== 6. 查询时模式 / Schema on Read
 

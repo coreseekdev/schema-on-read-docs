@@ -1,4 +1,4 @@
-== Overview
+== 1. Overview
 
 本文主要用于描述 Manticore / Sphinx 全文检索引擎的工作原理，便于开发人员迅速了解 Manticore / Sphinx 的架构与关键技术点。
 

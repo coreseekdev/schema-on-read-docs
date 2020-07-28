@@ -1,0 +1,80 @@
+digraph g {
+graph [
+rankdir = "LR"
+];
+node [
+fontsize = "16"
+shape = "ellipse"
+];
+edge [
+];
+
+    subgraph cluster_spi {
+        label = "Dict";
+        "spi" [
+            label = "<f>[SPI File]| _dummy_ | <f0> Entries | <f1>Checkpoints | Head"
+            shape = "record"
+        ];
+
+        "keyentry" [
+            label = "<f>[KeyEntry]|<f0> KeyDelta| <f1> DocListPos | <f2> iDocs | <f3> iHits | <f4>Hint | <f5> SkipListPos"
+            shape = "record"
+        ];
+
+        "checkpoint" [
+            label = "<f>[CheckPoint]|<f0> Key |<f1> Offset"
+            shape = "record"
+        ];
+
+        "spi":f0 -> "keyentry":f  [arrowhead=none];
+        "spi":f1 -> "checkpoint":f  [arrowhead=none];
+    }
+    
+    subgraph cluster_spd {
+        label = "DocList";
+        "spd" [
+            label = "<f>[SPD File]| _dummy_ | <f0> Entries"
+            shape = "record"
+        ];
+        "doclist" [
+            label = "<f>[DocList]|<f0> DocID |<f1> Offset|<f2> fieldMask | HitCount"
+            shape = "record"
+        ];
+        "spd":f0 -> "doclist":f [arrowhead=none]
+    }
+
+    subgraph cluster_spe {
+        label = "SkipList";
+        "spe" [
+            label = "<f>[SPE File]| _dummy_ | <f0> Entries"
+            shape = "record"
+        ];
+
+        "skiplist" [
+            label = "<f>[SkipList]|<f0> DocID |<f1> Offset|<f2> BaseHitOffset"
+            shape = "record"
+        ];
+        "spe":f0 -> "skiplist":f [arrowhead=none]
+    }
+    
+    subgraph cluster_spp {
+        label = "HitsList";
+        "spp" [
+            label = "<f>[SPP File]| _dummy_ | <f1> Hits"
+            shape = "record"
+        ];
+
+        "hits" [
+            label = "{<f0> | | <f1> | | | | | <f2> | | | | | | | <f3> }"
+            shape = "record"
+        ]
+
+        "spp":f1 -> "hits":f0
+    }
+
+    "keyentry":f5 -> "skiplist":f
+    "keyentry":f1 -> "doclist":f;
+    "doclist": f1 -> "hits":f1;
+    "skiplist": f1 -> "doclist":f0;
+    "skiplist": f2 -> "hits":f2;
+}

@@ -1,3 +1,6 @@
-== Galera
+== 8. 集群
 
-== Dist-Index
+=== 8.1 多主写入 / Galera
+
+=== 8.2 分布式索引 / Dist-Index
+

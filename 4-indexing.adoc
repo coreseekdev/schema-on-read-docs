@@ -16,7 +16,7 @@
 
 > 索引更新机制是通过将新构造的索引复制到指定位置之后，发送 Signal 到 searchd 实现的。
 
-=== 普通索引 / Plain Index
+=== 4.1 普通索引 / Plain Index
 
 以 XML 数据源为例，跟踪构建索引的过程。
 
@@ -71,7 +71,7 @@ include::{sourcedir}/sphinx.cpp[lines=11233..11279]
 [.text-center]
 表 4-2：构造 Plain Index 代码片段 `CSphIndex_VLN::Build`
 
-=== 实时索引 / Realtime Index / RT-Index
+=== 4.2 实时索引 / Realtime Index / RT-Index
 
 Realtime Index 是 Sphinx 提供的实时索引，在 Sphinx 阶段需要通过 SphinxQL，即通过模拟 MySQL 协议访问 `searchd`。
 
@@ -92,3 +92,172 @@ include::diagrams/rt-index.puml[]
 
 如果对一个 `plain index` 进行插入操作， `searchd` 会将这个索引的元信息修改为 `rt-index`，然后利用 `rt-index` 的机制记录修改过的索引。 
 
+以插入数据为例，考察数据插入的流程（注意：这部分代码也包括了  `Percolate Query/pq` 的插入逻辑，此处分析应忽略相关代码 ）。
+
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=10465..10489]
+----
+[.text-center]
+表 4-3：`RTIndex` 数据插入流程的入口
+
+在函数入口之后，对于输入数据的 Schema 进行了检查，进行插入前的数据准备
+
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=10636..10666]
+----
+[.text-center]
+表 4-4：构建文档的属性信息
+
+. `CSphMatchVariant` 代表一段内存空间，记录了实际的属性值以及字符串等Blob类型的属性值在 BlobStore 中的偏移量。
+. 每个属性对应一个 `CSphAttrLocator` 记录了属性具体的存储位置（相对于 `CSphMatchVariant` 起始位置的偏移量以使用的字节数)。
+. `tDoc` 会作为参数与待建立索引的文本数据一起送入 `AddDocument`
+
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=10839..10846]
+----
+[.text-center]
+表 4-5：构建索引
+
+在 `RtIndex_c::AddDocument` 中，会调用文本切分算法将文本切分成一个个 `CSphWordHit`, 包括 <DocID, WordID, WordPos> （实际代码中的字段名不同，意义相同） 。
+
+[source,c++]
+----
+include::{sourcedir}/sphinxrt.cpp[lines=1616..1634]
+----
+[.text-center]
+表 4-6：`RtIndex_c::AddDocument` 中构建索引
+
+在插入语句中，仅仅将插入数据对应的文档信息和用于构建倒排表的 `HitList` 放入临时数据缓存中，需要额外执行 Commit 指令，才能落盘。
+
+具体调用顺序为
+
+[plantuml, diagram-indexing, png]
+----
+include::diagrams/rt-indexing.puml[]
+----     
+[.text-center]
+图 4-4： 实时索引的构造流程
+
+`RtIndex` 在内存中维持一段 `m_dRamChunks` ，当达到阈值时，会写入到磁盘变为 `DiskChunk` 。 一个 `RtIndex` 可以有很多 `DiskChunk` ；
+如果在形成 `DiskChunk` 之前 `searchd` 停止了，则需要从 `binlog` 中读取数据，重新构建  `m_dRamChunks`。
+
+=== 4.3 索引文件 / Index format
+
+因为实时索引最终也会落盘转为 `Plain/Disk Index` ，所以索引结构仅以 `Plain Index` 为例。
+
+全文检索的核心为三个 list， wordlist、doclist、hitlist，分别对应 可检索的词、那些文档中有这些词、那些位置有这些词。 对于短文本最后一个 hitlist 可能会选择忽略，以压缩索引大小。
+
+具体 `Plain Index` 包括以下文件
+
+
+[%header,cols="1,4,3"] 
+|===
+|扩展名
+|用途
+|内存使用方式
+
+|sph
+|索引的元信息
+|加载到内存
+
+|spi
+|词典
+|加载到内存
+
+|spd(z)
+|词条与文档的对应关系
+|从磁盘读取或mmap，如启用压缩则为 stdz 压缩。
+
+|spp
+|文档与命中位置的关系
+|从磁盘读取
+
+|spa
+|索引的标量属性值
+|mmap 方式访问
+
+|spb
+|索引的可变长属性值，aka MVA
+|mmap 方式访问
+
+|spm
+|记录行的映射表，目前未使用
+|mmap 方式访问
+
+|spds
+|索引的字符串与JSON 属性的值
+| 磁盘读取，lz4压缩，有 16M 缓存
+
+|spk
+|需要删除的文档，作用于前面检索的索引
+|加载到内存构建特定结构后释放
+
+|sphi
+|统计标量属性中值的分布情况
+|加载到内存
+
+|spt
+|通过docid 加载文档的索引
+|mmap 方式访问
+
+|===
+
+此处的信息可参阅 `doc/internals-index-format.txt`。
+
+索引文件的构造依赖两个方法， `delta encoding` 和 `variable length
+byte string /VLB` 。 由于可以保证倒排表中，文档的id 是单一升序编号的，因此存在对应的简写技巧
+
+----
+source-sequence = 3, 5, 7, 11, 13, 17, ...
+delta-encoded = 3, 2, 2, 4, 2, 4, ...
+----     
+
+VLB 则是在保留对小数字压缩编码能力的同时，保留对较大数字的编码能力。可以理解为上不封顶的 UTF-8。
+
+==== 4.3.1 spi 文件
+
+Spi 文件 在 Sphinx 时期同时支持 CRC32 模式 和 Keyword 模式，在实际中，如果启用了 infix CRC 模式膨胀系数过高，因此在目前的部署实践中，均采用 Keyword 模式。
+
+[graphviz, diagram-fileformat, png]
+----
+include::diagrams/indexfileformat.gv[]
+----     
+[.text-center]
+图 4-5： 索引文件结构及其关系
+
+*SPI*
+
+. SPI 文件 由 dummy, keywords, checkpoints, dict_header， meta 构成
+. dummy 是一个无意义的字节，用于避免在使用 VLB 压缩时编码出错。
+. keywords 在写入前按字母序进行排序，并记录与前一个 
+. `DictKeyword_t` 记录了 Keyword 在 spd 文件中的偏移量
+. `DictKeyword_t` 记录了 Keyword 在 spe / Skiplist file 中的偏移量，如果 包括这个词的 doc 数超过了阈值
+. 每经过 `SPH_WORDLIST_CHECKPOINT` 个词条，会保存一个 Checkpoint，用于快速定位 Key
+. Hint 用于记录 Hit 数 与 文档数的比值，便于查询时进行优化
+
+*SPD*
+[start=1]
+. SPD 文件 存储了出现了 Key 的文档列表。
+. 列表可能会非常长，额外引入了 SkipList 机制，允许从 DocList 倒排索引的中间部分开始解压倒排表。
+. fieldMask 记录了在 Hits 中是否出现在特定字段中
+
+*SPP*
+[start=1]
+. SPP 文件是一个单纯的倒排表列表，记录了 Key 出现在具体文中的位置。对于 Field 的结束，Hit 进行了特殊标记，对于文档切换，SPP 中插入了 0 作为间隔标记。
+
+*SPA*
+[start=1]
+. SPA 文件未出现在图中，其根据索引时 Schema 计算的空间大小，存储为 DocCount * sizeof(Schema) 大小的数组
+. 对于 Blob 型数据， SPA 文件记录了其实际数据的偏移量。
+
+从上面的文档结构可以看出  Sphinx 在
+
+. SPA 的存储方式上，存在进一步压缩的可能
+. SPP 和 SPD 的存储方式存在进一步压缩的可能。
+
+比如，可以考虑在识别出日志模板后，有针对性的对文档进行排序，让 DocList 可以复用部分 DocList 片段；而复用了 DocList 片段的隐含意义是 HitList 的存储也是复用的。
+
+在现有的 SPDZ 实现中，为简化起见没有使用此种复杂逻辑。

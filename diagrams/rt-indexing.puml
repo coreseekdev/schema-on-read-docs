@@ -1,0 +1,7 @@
+@startuml
+CSphinxqlSession -> HandleCmdReplicate : Execute(STMT_COMMIT)
+HandleCmdReplicate -> CommitMonitor_c : Commit
+CommitMonitor_c -> RtIndex_c :Commit
+RtIndex_c -> RtIndex_c : CommitReplayable
+RtIndex_c -> RtIndex_c : SaveDiskChunk
+@enduml
