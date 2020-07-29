@@ -61,33 +61,177 @@ include::{sourcedir}/sphinxquery.cpp[lines=18..40]
 
 === 5.3 查询的处理过程 / Query Processing
 
+Sphinx 支持单次执行多个查询，这种设计主要是考虑到 分面/facet 统计的需要，这种模式中，通常会存在一个普通查询来读取结果，然后再接一个查询条件都相同的分面统计查询来进行属性的统计。搜索引擎在此模式下，可以考虑对查询结果进行缓存，但是
 
-		case STMT_SELECT:
-			{
-				MEMORY ( MEM_SQL_SELECT );
+. 查询结果可能很大，导致无法完全缓存在内存中
+. 影响搜索服务的并发访问能力
 
-				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );
-				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
-				dStmt.Begin()->m_pTableFunc = nullptr;
+提供单次执行多个查询的能力，有利于性能优化。下面考察查询的处理逻辑。
 
-				if ( m_tVars.m_bProfile )
-					tHandler.SetProfile ( &m_tProfile );
-				if ( m_bFederatedUser )
-					tHandler.SetFederatedUser();
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=15138..15174]
+----
+[.text-center] 
+表 5-3：`CSphinxqlSession::Execute`
 
-				if ( HandleMysqlSelect ( tOut, tHandler ) )
-				{
-					// query just completed ok; reset out error message
-					m_sError = "";
-					AggrResult_t & tLast = tHandler.m_dResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.m_bProfile ? &m_tProfile : nullptr ) );
-				}
+. 一个连接到 `searchd` 的客户端对应一个 `Session`
+. 一个 `SearchHandler_c` 可以持有多个查询，存储在 `m_dQueries`
+. 计算完毕后，返回 `m_dResults`
+. 记录 Meta 信息
 
-				// save meta for SHOW META (profile is saved elsewhere)
-				m_tLastMeta = tHandler.m_dResults.Last();
-				return true;
-			}
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=5100..5124]
+----
+[.text-center] 
+表 5-4：支持对同一索引执行多个查询
+
+. 对比索引名称，如果相同则合并处理
+. `OnRunFinished` 目前仅整理了部分元信息
+
+在 `RunSubset` 中，混合了检索 本地索引/Local Index 和 远端检索服务/Remote Agents 的 逻辑，整体的检索逻辑可以分为 3 ~ 5 步。
+
+. [必经] 检查执行条件
+
+* 确认是否可以同时执行多个查询，依据是各查询的检索条件均一致，在函数 `CheckMultiQuery` 中
+* 确认本地的索引存在且可以获得读取的锁
+* 确认查询的选出的字段是否支持 `m_bMultiQueue`，要求字段的表达式均相同。
+
+** 此处存在优化空间，目前的实现是要求表达式的字符串值相同，但是实际执行中只需要计算任务相同即可
+** 需要进一步确认 Schema On Read 模式开始时，此处的行为。
+
+[source,c++]
+----
+include::{sourcedir}/searchd.cpp[lines=5783..5830]
+----
+[.text-center] 
+表 5-4：`SearchHandler_c::AllowsMulti` 检查查询选出的字段
+
+[start=2]
+. [可选] 准备与 远端搜索服务/Remote Agent 的通信通道，如果有需要
+. [必经] 执行本地的查询，通过 `RunLocalSearches`
+. [可选] 等待 远端搜索服务/Remote Agent 的返回结果，如果有
+. [必经] 归并检索的结果
+. [可选] 执行 `TableFunc` 对结果集进行 Reform.
+
+在进行 `RunLocalSearches` 的任务中，因为历史原因，分成两个部分，多线程 和 单线程。
+
+* 单线程
+
+    ** 遍历每一个索引
+    ** *进行执行前准备*，创建 `ISphMatchSorter` 
+    ** 执行 `MultiQuery(Ex)` 
+ 
+* 多线程 `RunLocalSearchesParallel`
+
+    ** *进行执行前准备*，创建 `ISphMatchSorter` 并赋值到具体的 `LocalSearch_t` 
+    ** 针对每个索引创建一个线程，也就是即便开启了多线程模式，仍然是一个索引一个线程
+    ** 执行 `MultiQuery(Ex)` 
+
+`ISphMatchSorter` 是非常重要的数据结构，其在执行前对查询的字段进行调整，执行后对检索结果进行排序。
+
+[source,c++]
+----
+include::{sourcedir}/sphinxsort.cpp[lines=6438..6457]
+...
+----
+[source,c++]
+----
+...
+include::{sourcedir}/sphinxsort.cpp[lines=6569..6578]
+----
+[.text-center] 
+表 5-5：创建 `ISphMatchSorter`
+
+每一种不同的索引，其具体进行查询的方式也不同。 具体到 Manticore，其 三种不同的索引(Plain, RT, Percolate) 均实现了各自的 `MultiQuery(Ex)`。
+
+其中， PlainIndex 的实现是最常见的，接下来进入 PlainIndex 的 `MultiQuery(Ex)`
+
+在 `CSphIndex_VLN::MultiQuery` 仍然处于查询的准备阶段，
+
+. 检查是否是有快速路径，即没有任何条件的全量扫描 
+. 对查询条件进行解析后，再次检查是否仅是全量扫描
+. 对 Extend Query 构造出的 AST 进行查询改写
+. 扩展查询关键词
+. 处理前缀查询
+. 识别 AST 中的公共子树
+. 调用 `ParsedMultiQuery` 执行实际的查询，其中 `CSphQueryNodeCache` 提供了对某个特定的节点（关键词） 的结果的缓存机制，从代码上看，未启用。
+
+进入 `CSphIndex_VLN::ParsedMultiQuery` ， 整个函数比较长，分段摘录如下：
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=16105..16113]
+----
+. 通过 `CSphQueryProfile` 可以记录检索执行各阶段的耗时
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=16131..16141]
+----
+[start=2]
+. 通过 `CSphQueryContext::SetupCalc` 配置需要计算的字段，以及字段计算发生的阶段
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=16198..16204]
+----
+[start=3]
+. 通过 `sphCreateRanker` 创建一个合适的文档打分器
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=16232..16256]
+----
+[start=4]
+. 通过 预先统计的属性信息（记录了各属性的最大值与最小值），对过滤条件进行判断，确定索引中是否可能存在符合条件的记录
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=16274..16327]
+----
+[start=5]
+. 实际执行关键词检索并计算文档权重
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=12972..12993]
+...
+----
+
+* 在 `CSphIndex_VLN::MatchExtended` 通过 `pRanker` 来执行实际的检索任务
+* 提供了 pMatch 用于追踪文档的属性信息
+* `GetMatches` 返回匹配的文档数量，因为结果缓冲区大小受限制，`GetMatches` 需要被调用多次
+* 计算排序依赖的字段，并按属性进行过滤
+* 计算文档对应的权重
+
+[source,c++]
+----
+include::{sourcedir}/sphinxsearch.cpp[lines=822..848]
+...
+----
+
+* 在 ` ExtRanker_State_T<STATE,USE_BM25>::GetMatches` 中通过 `GetFilteredDocs` 来获取检索出的文档
+* 在 `ExtRanker_T<USE_BM25>::GetFilteredDocs` 中，通过 `GetDocsChunk` 遍历获取文档信息。
+* `m_pRoot` 为 Extended Query Parser 解析出并被修正过的记录了检索意图的 AST 
+** 在这个根下，根据 and or not 等逻辑关系，从小到大 遍历符合条件的 docId
+** 可参考 `ExtAnd_c` , `ExtOr_c`, `ExtMaybe_c` 等的实现细节
+
+至此，检索的执行逻辑基本执行完毕。
+
+需要额外补充，对于计算文档权重方面在 `sphCreateRanker` 中，常见的是创建了 `ExtRanker_Expr_T`, 其实际用于计算文档权重的算法，参考其定义为 `RankerState_Expr_fn`，这一系列类需要关注下面的接口:
+
+[source,c++]
+----
+...
+include::{sourcedir}/sphinxsearch.cpp[lines=1874..1879]
+...
+----
+
+* 对于发现的潜在的符合命中条件的文档，需要将符合条件的 Hit 信息送入 `Update`，让权重计算函数有机会更新权重计算信息；
+* 调用 `Finalize` 时，会根据当前了解的 Hit 信息，计算相应的权重。
+
 
 === 5.4 自定义计算任务 / Eval & UDF
 
