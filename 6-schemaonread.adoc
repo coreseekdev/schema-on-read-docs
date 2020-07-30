@@ -1,2 +1,14 @@
 == 6. 查询时模式 / Schema on Read
 
+当待检索的索引 Schema 无法确定时，可以通过 SchemaOnRead 机制在检索时动态抽取字段。
+
+* 对于 JSON 型的 PayLoad， Sphinx 通过JSON数据类型进行支持
+** 在具体实现中，Sphinx 会提前解析 JSON 存储为二进制的 BSON 格式
+* 对于 自由文本 型的 Payload, Sphinx/Manticore 均没有解决方案
+
+Coreseek 的 SchemaOnRead ( 简写做 SoR ) 针对自由文本的动态字段抽取问题提供了解决方案。该解决方案依赖以下机制
+
+. 自定义计算字段
+
+相关的功能涉及以下代码:
+

@@ -125,8 +125,8 @@ include::{sourcedir}/searchd.cpp[lines=5783..5830]
  
 * 多线程 `RunLocalSearchesParallel`
 
-    ** *进行执行前准备*，创建 `ISphMatchSorter` 并赋值到具体的 `LocalSearch_t` 
     ** 针对每个索引创建一个线程，也就是即便开启了多线程模式，仍然是一个索引一个线程
+    ** *进行执行前准备*，创建 `ISphMatchSorter` 并赋值到传入的指针在 `SearchHandler_c::RunLocalSearchMT` 中
     ** 执行 `MultiQuery(Ex)` 
 
 `ISphMatchSorter` 是非常重要的数据结构，其在执行前对查询的字段进行调整，执行后对检索结果进行排序。
@@ -233,8 +233,38 @@ include::{sourcedir}/sphinxsearch.cpp[lines=1874..1879]
 * 调用 `Finalize` 时，会根据当前了解的 Hit 信息，计算相应的权重。
 
 
-=== 5.4 自定义计算任务 / Eval & UDF
+=== 5.4 自定义计算字段 / Eval 
 
-=== 5.5 检索过滤 / Percolate Query
+在计算字段和排序规则两处，Sphinx 支持用户自定义公式进行扩展，因为日志检索的不需要对排序规则进行定制，下面结合自定义计算字段，分析其实现逻辑。
 
-ES 也有 Percolate Query
+[source,c++]
+----
+include::{sourcedir}/sphinxsort.cpp[lines=6438..6457]
+----
+[.text-center] 
+表 5-6：自定义计算字段的支持入口
+
+. `MaybeAddGeodistColumn` 检测是否使用了 地址位置检索功能，如存在 添加字段 "@geodist"
+. `MaybeAddExprColumn` 如果排序规则为用户自定义，添加字段 "@expr"
+. `MaybeAddExpressionsFromSelectList` 添加其他用户自定义字段，具体的解析逻辑在 `QueueCreator_c::ParseQueryItem`
+
+至此，系统已经知道了应该存在那些需要进行自定义计算的字段，但是这种计算字段的计算量往往很大，如果全部在检出结果后就进行计算，则当后面文档被过滤掉时，相关的计算就被浪费了。因此，Sphinx 在具体执行阶段，还引入了额外的机制来 1. 缓存计算结果，2. 避免多余的计算。
+
+[source,c++]
+----
+include::{sourcedir}/sphinx.cpp[lines=14514..14606]
+----
+[.text-center] 
+表 5-6：确定执行计算任务的阶段
+
+[source,c++]
+----
+include::{sourcedir}/sphinxexpr.h[lines=61..72]
+----
+[.text-center] 
+表 5-7：对任务执行阶段的定义
+
+. 通过 GetEarliestStage 确定字段的值被使用的最早阶段
+. 具体 计算阶段 及其发生的时间在代码注释中有说明
+
+后面在 SchemaOnRead 中，会对如何计算字段的依赖关系有进一步展开。
