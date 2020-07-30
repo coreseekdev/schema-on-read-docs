@@ -1,3 +1,3 @@
 [submodule "cjk-data"]
 	path = cjk-data
-	url = https://github.com/nzinfo/asciidoc-cjk-data
+	url = https://github.com/coreseekdev/asciidoc-cjk-data
