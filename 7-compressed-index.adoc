@@ -1,1 +1,50 @@
 == 7. 索引压缩 / Index Compress
+
+Manticore 针对存储文档正文的 DocStore 提供了 LZ4 压缩的能力，但是对于日志型数据来说，索引中会出现大量的高频词。导致倒排表，具体来讲是 spd 和 spp 膨胀的较为迅速。
+
+考虑到日志检索的实际场景，特别是 SoR 特性在执行过程中，是通过 正则表达式来确定属性的前后关系的，因此 spp 文件对于日志索引可忽略。
+
+* 这一部分的功能的工作原理，对于 spp 文件也支持
+* 对于生产系统，可以考虑在文件系统层面对文件提供压缩支持，这样不但 spd 文件可以得到压缩，对于 spa 文件，也有极大的助益
+
+此功能涉及的源代码文件如下：
+
+[%header,cols="1,4"] 
+|===
+|文件
+|用途
+
+|src/coreseek/zmemorypool.cpp
+| ZSTD 压缩文件的流读取接口，上层应用感知不到数据被压缩 
+
+|src/coreseek/zmemorypool.h
+| 
+|src/datareader.cpp
+| 调整数据读取接口，使其能感知并支持 spdz
+|src/datareader.h
+| 
+|src/index_converter.cpp
+| 对索引格式转换工具的相关逻辑进行了注释
+|src/indexcheck.cpp
+| 调整索引检查工具，使其能识别 spdz
+|src/indexsettings.cpp
+| 增加对索引压缩的选项的支持（"index_compression"），目前只能一直打开
+|src/indexsettings.h
+| 
+|src/sphinx.cpp
+| 对 spdz 文件扩展名的支持
+|src/sphinxint.h
+| spdz 文件类型常量
+|src/sphinxutils.cpp
+| 增加索引压缩的选项（"index_compression"）
+|===
+
+Spdz 的工作原理如下
+
+. 在 Sphinx 中，读取 spd 文件，是通过 DataReader 接口，
+.. 具体来说，是通过 `SeekTo` 调用移动文件读取的位置，然后通过反复调用 `UnzipInt`, `UnzipOffset` 实际读取数据
+.. 因为这里的顺序读取机制，给压缩spd 文件带来了可能，只需要在内存中解压当前位置后面的一小段数据，就可以在进行数据压缩的同时提供接近未压缩文件的处理性能
+.. 考虑到磁盘 IO 的限制，压缩后的文件的读取性能可能会超过未压缩的
+. 通过记录 spd 数据写入时的数据分段和对应到压缩文件 spdz 的偏移量，可以确认需要解压的数据块，在 `SeekTo` 函数中
+. 可以考虑额外提供缓存机制（LRU算法），对于频繁访问的数据块 让其驻留内存
+.. 经过对系统的性能测试后，发现启用压缩并未显著影响性能，此处这个 LRU 虽然提供了代码，但是并未启用。

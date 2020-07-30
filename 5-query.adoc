@@ -264,7 +264,7 @@ include::{sourcedir}/sphinxexpr.h[lines=61..72]
 [.text-center] 
 表 5-7：对任务执行阶段的定义
 
-. 通过 GetEarliestStage 确定字段的值被使用的最早阶段
+. 通过 `GetEarliestStage` 确定字段的值被使用的最早阶段
 . 具体 计算阶段 及其发生的时间在代码注释中有说明
 
 后面在 SchemaOnRead 中，会对如何计算字段的依赖关系有进一步展开。

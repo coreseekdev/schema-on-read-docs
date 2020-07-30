@@ -8,7 +8,53 @@
 
 Coreseek 的 SchemaOnRead ( 简写做 SoR ) 针对自由文本的动态字段抽取问题提供了解决方案。该解决方案依赖以下机制
 
-. 自定义计算字段
+* 自定义计算字段
 
 相关的功能涉及以下代码:
 
+[%header,cols="1,4"] 
+|===
+|文件
+|用途
+
+|src/attribute.cpp
+| 标记正则表达式的字段内部属性 `$\_regex_`+schema_namespace 
+|src/searchd.cpp
+| 预制部分信息，让 SoR 有足够的信息进行计算
+|src/searchdexpr.cpp
+| SoR 的主要扩展，提供 select 语句中抽取表达式的支持
+|src/searchdexpr.h
+| 
+|src/searchdsql.cpp
+| 对使用 Regex，自定义 Schema 的支持  
+|src/sphinx.cpp
+| 优化 SoR 表达式相同的字段无需重复计算，即
+|src/sphinx.h
+| 特性开关
+|src/sphinxexpr.cpp
+| 为抽取表达式传入 Schema
+|src/sphinxexpr.h
+| 
+|src/sphinxsearch.cpp
+| 
+|src/sphinxsort.cpp
+| 对内部属性 `$\_regex_`+schema_namespace 进行存储、计算 
+|src/sphinxstd.h
+| 保持 SoR 表达式中，用户给出的自定义 Schema
+|===
+
+SoR 的基本设计思路是
+
+. 调整 SphinxQL 表达式，增加 名为 "schema" 的选项，具体代码见 `src/searchdsql.cpp`
+. 执行 pcre 的 JIT 编译，并记录其中包括的 capture group 和 named capture group
+. 根据表达式对执行阶段的依赖关系，调整 自定义计算字段的执行阶段
+. 在执行具体抽取任务前，执行 schema 对应的正则表达式，并将抽取结果进行缓存
+. Manticore 中对于可计算节点提供了 Hash 机制以确定是否需要实际执行计算任务
+.. 需要注意，Manticore 无法通过 Hash 反推具体依赖的字段
+.. 实际的字段的依赖关系获取，需要 实现 `ISphExpr::Command` 接口，并支持 `SPH_EXPR_GET_DEPENDENT_COLS` 命令
+.. 通过定义这个依赖关系，会影响 `GetEarliestStage` 的计算结果。
+. 对于依赖同一个 Regex 的抽取表达式，SoR 还提供了 Alias 机制以避免重复计算，后续需要考虑是否迁移到系统提供的在 `RunSubset` 中的字段合并机制
+. 在 Manticore 中，字符串可能出现在两个位置 BlobStore 和 DocStore，其中 DocStore 一般是最后才进行读取的，对此 SoR 按抽取的需要调整了 DocStore 的读取时机。
+
+
+关于 SoR 的具体用法，参照 随代码的 README.coreseek.md
