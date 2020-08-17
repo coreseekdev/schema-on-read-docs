@@ -1,0 +1,18 @@
+[.lightbg, background-video="videos/woman-study.mp4",background-video-loop="true", background-opacity="0.5"]
+== Agenda
+
+1. How to access
+2. Index Building
+3. Query
+4. Index Management
+
+
+
+[.notes]
+--
+While you lean back and take a beer, I'll …
+
+{nbsp} +
+[.decent]#icon:hand-point-right[] v12+ & Preview Features:# [version]#12# [version]#13# [preview]#preview#
+
+--

@@ -1,0 +1,145 @@
+[.lightbg, background-image="manuscript.jpg"]
+== History
+
+* 2001  作为 Andrew Aksyonoff 的个人项目
+* 2008  Sphinx Technologies Inc 成立
+* 2008  Coreseek 成立
+* 2016  开发团队分裂， Sphinx 转为闭源项目 
+* 2017  作为 Manticore Search
+
+== Elastic VS Sphinx
+
+[.col2.x-small]
+--
+.JVM Based
+*    优点
+**   可移植性高
+**   Hotspot 即时编译
+*    缺点
+**   内存消耗高
+**   每次启动需要即时编译
+
+.Usage
+*    索引
+**   HTTP 接口
+**   无需预设索引结构
+*    查询
+**   HTTP 接口
+**   HTTP 接口 ，带 SQL 扩展
+**   用户自定义排序公式
+--
+
+[.col2.x-small]
+--
+.Native Code
+*    优点
+**   内存占用低
+**   启动速度快
+**   便于利用操作系统的特性
+*    缺点
+**   出错，服务即崩溃
+**   难以根据应用做进一步优化
+
+.Usage
+*    索引
+**   CLI | Socket API | MySQL | HTTP 接口 
+**   需要预设索引结构, 支持 JSON 和 **Schema On Read**
+*    查询
+**   Socket API | MySQL | HTTP 接口
+**   用户自定义排序公式
+--
+
+=== Elastic VS Sphinx
+
+[.col2.x-small]
+--
+.Cluster
+*   自动横向扩展
+*   自动同步
+*   集群热备
+*   监控接口丰富
+
+.Integration
+*   HTTP 接口
+*   可视化 Kibana
+
+.Format
+*   可扩展索引结构
+*   使用了较新的倒排算法
+*   默认启用压缩
+*   需要额外的缓存 (Before 7.7)
+**  FileSystem Cache , 1/2 Total RAM
+--
+
+[.col2.x-small]
+--
+.Cluster
+*    手动横向扩展
+*    支持数据同步（手动配置）
+*    集群热备
+*    有一定的监控能力
+
+.Integration
+*    HTTP 接口
+*    MySQL 接口
+*    支持 SQL 的可视化工具
+
+.Format
+*   扩展索引结构困难
+*   倒排压缩算法较传统（旧）
+*   默认仅正排索引压缩
+*   对 缓存 的需求低
+
+--
+
+[.bonuscontent]
+=== MMap in ELASTIC
+
+[.col2.x-small]
+--
+.index.store.type
+*   niofs
+*   mmapfs
+*   hybridfs
+
+.OOM?
+*   vm.max_map_count
+*   MMAP readahead
+*   jhat 命令
+*   `syscall` madvise() 
+
+--
+
+[.source.col2,java]
+.hybridfs
+----
+switch(extension) {
+    case "nvd":
+    case "dvd":
+    case "tim":
+    case "tip":
+    case "cfs":
+        return true;
+    default:
+        return false;
+}
+----
+
+[.refs]
+--
+* https://www.cnblogs.com/naughtycat/p/elasticsearch-oom-optimize-story.html[记一次Elasticsearch OOM（内存溢出）的优化过程]
+* https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html[Virtual memory]
+* https://elasticsearch.cn/article/754[Mmap fs可能让大索引访问变得缓慢]
+* https://medium.com/@brk0v/mmap-readahead-linux-internals-d96b8fbef202[MMAP readahead Linux internals]
+* https://www.usenix.org/sites/default/files/conference/protected-files/hotstorage17_slides_choi.pdf[Efficient Memory Mapped File I/O
+for In-Memory File Systems]
+* https://github.com/elastic/elasticsearch/issues/27748[Avoid file cache trashing on Linux with mmapfs by using madvise() ]
+* https://www.elastic.co/cn/blog/significantly-decrease-your-elasticsearch-heap-memory-usage[Coming in 7.7: Significantly decrease your Elasticsearch heap...]
+* https://www.easyice.cn/archives/346[ELASTICSEARCH 7.3 的 OFFHEAP 原理]
+--
+
+
+
+ 
+
+
