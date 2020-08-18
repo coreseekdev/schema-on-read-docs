@@ -1,0 +1,203 @@
+[.lightbg,background-video="videos/keyboard.mp4",background-video-loop="true",background-opacity="0.7"]
+== Query
+
+=== Overview
+
+[.col2.x-small]
+--
+.Mode
+* SPH_MATCH_ALL
+* SPH_MATCH_ANY
+* SPH_MATCH_PHRASE
+* **SPH_MATCH_BOOLEAN**
+* **SPH_MATCH_EXTENDED**
+* SPH_MATCH_FULLSCAN
+--
+
+[.col2.x-small]
+--
+.Ranker
+* **SPH_RANK_PROXIMITY_BM25**
+* SPH_RANK_BM25
+* **SPH_RANK_NONE**
+* SPH_RANK_WORDCOUNT
+* SPH_RANK_PROXIMITY 
+* SPH_RANK_MATCHANY 
+* SPH_RANK_FIELDMASK 
+* SPH_RANK_SPH04 
+* **SPH_RANK_EXPR**
+--
+
+=== Extended query syntax
+
+[.col2.x-small]
+--
+.OR
+----
+hello | world
+----
+.MAYBE
+----
+hello MAYBE world
+----
+.NOT
+----
+hello -world
+hello !world
+----
+.field search
+----
+@title hello @body world
+@body[50] hello
+@(title,body) hello world
+@!title hello world
+@!(title,body) hello world
+@* hello
+----
+.phrase 
+----
+"hello world"
+----
+.proximity 
+----
+"hello world"~10
+----
+.quorum matching
+----
+"the world is a wonderful place"/3
+----
+--
+
+[.col2.x-small]
+--
+.strict order 
+----
+aaa << bbb << ccc
+----
+.exact form 
+----
+raining =cats and =dogs
+----
+.field-start and field-end
+----
+^hello world$
+----
+.keyword IDF boost 
+----
+boosted^1.234 boostedfieldend$^1.234
+----
+.NEAR / SENTENCE / PARAGRAPH 
+----
+hello NEAR/3 world NEAR/4 "my test"
+all SENTENCE words SENTENCE "in one sentence"
+"Bill Gates" PARAGRAPH "Steve Jobs"
+----
+.NOTNEAR
+----
+Church NOTNEAR/3 street
+----
+
+--
+
+=== Extended query syntax / ZONE
+
+* 默认为 HTML / XML 文档设置，需要显式开启
+----
+index_zones = h*, th, title
+----
+
+* 与字段查询类似，但是不要求在同一个zone 中
+* 目前需要开启 posting position.
+
+----
+(ZONE:th hello world)
+----
+
+=== Query / SphinxQL
+
+[source,SQL]
+.Basic Query
+----
+mysql> SELECT * FROM test_index WHERE MATCH ('pile box') AND channel_id<1000 GROUP BY group_id;
+----
+
+[source,SQL]
+.Schema On Read
+----
+mysql> SELECT id, abc('mtype', 'ipv4', 'hello') as k, abc('mtype', 'ipv4', 'hello') as y, \
+       abc() as c from csv where c > 0 option \
+       schema=abc('body:org\\.apache\\.hadoop\\.(?P<mtype>[\\w\\.]+)') \
+       FACET abc('mtype', 'ipv4', 'hello') as g;
+
+|   22 | hdfs.server.datanode.web.DatanodeHttpServer         | hdfs.server.datanode.web.DatanodeHttpServer         |    2 |
+|   23 | hdfs.server.datanode.DataNode                       | hdfs.server.datanode.DataNode                       |    2 |
+...
+----
+
+=== Query / FACET
+[source,SQL]
+----
+mysql> SELECT *, IN(brand_id,1,2,3,4) AS b FROM facetdemo WHERE MATCH('Product') AND b=1 LIMIT 0,3
+FACET brand_name, brand_id BY brand_id ORDER BY brand_id ASC
+FACET INTERVAL(price,200,400,600,800) ORDER BY FACET() ASC
+FACET categories ORDER BY FACET() ASC;
++------+-------+----------+-------------------+-------------+----------+------------+------+
+| id   | price | brand_id | title             | brand_name  | property | categories | **   |
++------+-------+----------+-------------------+-------------+----------+------------+------+
+|    1 |   668 |        3 | Product Four Six  | Brand Three | Three    | 11,12,13   |    1 |
+|    2 |   101 |        4 | Product Two Eight | Brand Four  | One      | 12,13,14   |    1 |
+|    8 |   750 |        3 | Product Ten Eight | Brand Three | Five     | 13         |    1 |
++------+-------+----------+-------------------+-------------+----------+------------+------+
++-------------+----------+----------+
+| brand_name  | brand_id | count(*) |
++-------------+----------+----------+
+| Brand One   |        1 |     1012 |
+| Brand Two   |        2 |     1025 |
++-------------+----------+----------+
++---------------------------------+----------+
+| interval(price,200,400,600,800) | count(*) |
++---------------------------------+----------+
+|                               0 |      799 |
+|                               1 |      795 |
+...
+----
+
+=== Query / JSON
+
+[.col2.x-small]
+--
+[source,JSON]
+----
+{
+  key1: {
+    key2: {
+      key3: "value"
+    }
+  }
+}
+----
+
+[source,JSON]
+----
+{
+  "a": [
+    1, 2, 3, 4
+  ],
+  "t": [
+    "t1", "t2", "t3"
+  ]
+}
+----
+--
+
+[.col2.x-small]
+--
+[source,SQL]
+----
+SELECT  j.key1.key2.key3 FROM index WHERE   j.key1.key2.key3='value';
+----
+[source,SQL]
+----
+SELECT * FROM index WHERE j.a[0]=1
+----
+--

@@ -41,15 +41,9 @@ include::presentation-access.adoc[]
 
 include::presentation-buildindex.adoc[] 
 
-include::presentation-api.adoc[] 
+include::presentation-query.adoc[] 
 
-include::presentation-tooling.adoc[]
-
-include::presentation-outlook.adoc[]
-
-include::presentation-appendix.adoc[]
-
-
+include::presentation-ilm.adoc[]
 [pass]
 ++++
 <script src="./live.js"></script>

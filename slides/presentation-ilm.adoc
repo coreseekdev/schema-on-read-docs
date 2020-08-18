@@ -1,5 +1,13 @@
 [.lightbg,background-video="videos/hammer.mp4",background-video-loop="true",background-opacity="0.7"]
-== Index Lifecycle Management
+== Index Lifecycle Management 
+
+=== Create
+=== Load & Rotate
+=== Shard
+=== Failover
+=== Distributed
+=== Consensus
+
 
 [%notitle,background-video="videos/jshell-demo.mp4",background-size="contain"]
 === REPLS: `jshell` [jep]#https://openjdk.java.net/jeps/222[JEP 222]#

@@ -1,5 +1,5 @@
 [.lightbg, background-video="videos/flowers.mp4",background-video-loop="true", background-opacity="0.7"]
-== Access Manticore
+== Access to Manticore
 
 === Sphinx API 
 

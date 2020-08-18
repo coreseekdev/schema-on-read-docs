@@ -167,11 +167,11 @@ document.getElementsByTagName( 'head' )[0].appendChild( link );</script><link re
 }</code></pre></div></div>
 <div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="https://www.cnblogs.com/naughtycat/p/elasticsearch-oom-optimize-story.html">记一次Elasticsearch OOM（内存溢出）的优化过程</a></p></li><li><p><a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html">Virtual memory</a></p></li><li><p><a href="https://elasticsearch.cn/article/754">Mmap fs可能让大索引访问变得缓慢</a></p></li><li><p><a href="https://medium.com/@brk0v/mmap-readahead-linux-internals-d96b8fbef202">MMAP readahead Linux internals</a></p></li><li><p><a href="https://www.usenix.org/sites/default/files/conference/protected-files/hotstorage17_slides_choi.pdf">Efficient Memory Mapped File I/O
 for In-Memory File Systems</a></p></li><li><p><a href="https://github.com/elastic/elasticsearch/issues/27748">Avoid file cache trashing on Linux with mmapfs by using madvise() </a></p></li><li><p><a href="https://www.elastic.co/cn/blog/significantly-decrease-your-elasticsearch-heap-memory-usage">Coming in 7.7: Significantly decrease your Elasticsearch heap&#8230;&#8203;</a></p></li><li><p><a href="https://www.easyice.cn/archives/346">ELASTICSEARCH 7.3 的 OFFHEAP 原理</a></p></li></ul></div></div></div></div></section></section>
-<section id="_agenda" class="lightbg" data-background-video="videos/woman-study.mp4" data-background-video-loop data-background-opacity="0.5"><h2>Agenda</h2><div class="slide-content"><div class="olist arabic"><ol class="arabic"><li><p>How to access</p></li><li><p>Index Building</p></li><li><p>Query</p></li><li><p>Index Management</p></li></ol></div>
+<section id="_agenda" class="lightbg" data-background-video="videos/woman-study.mp4" data-background-video-loop data-background-opacity="0.5"><h2>Agenda</h2><div class="slide-content"><div class="olist arabic"><ol class="arabic"><li><p>Access to Manticore</p></li><li><p>Index Building</p></li><li><p>Query</p></li><li><p>Index Lifecycle Management</p></li></ol></div>
 <aside class="notes"><div class="paragraph"><p>While you lean back and take a beer, I&#8217;ll …</p></div>
 <div class="paragraph"><p>&#160;<br>
 <span class="decent"><span class="icon"><i class="fa fa-hand-point-right"></i></span> v12+ &amp; Preview Features:</span> <span class="version">12</span> <span class="version">13</span> <span class="preview">preview</span></p></div></aside></div></section>
-<section><section id="_access_manticore" class="lightbg" data-background-video="videos/flowers.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Access Manticore</h2></section><section id="_sphinx_api"><h2>Sphinx API</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><ul><li><p>最早的 Sphinx 访问方式</p></li><li><p>二进制 Socket 接口</p></li><li><p>Manticore 集群节点之间的通信协议</p></li></ul></div></div></div>
+<section><section id="_access_to_manticore" class="lightbg" data-background-video="videos/flowers.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Access to Manticore</h2></section><section id="_sphinx_api"><h2>Sphinx API</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><ul><li><p>最早的 Sphinx 访问方式</p></li><li><p>二进制 Socket 接口</p></li><li><p>Manticore 集群节点之间的通信协议</p></li></ul></div></div></div>
 <div class="listingblock source col2"><div class="title">API</div>
 <div class="content"><pre class="highlightjs highlight"><code data-lang="php" class="language-php hljs" data-noescape="true">require ( "sphinxapi.php" );
 $cl = new SphinxClient ();
@@ -201,291 +201,173 @@ if ( !mysqli_multi_query ( $link, $batch ) )
   listen = 127.0.0.1:9307:mysql_vip
   ...</pre></div></div></div></div></div></section><section id="_sphinxse_federated"><h2>SphinxSE / FEDERATED</h2><div class="slide-content"><div class="ulist"><ul><li><p>Manticore 作为 MySQL / MariaDB 的远程存储引擎</p><div class="ulist"><ul><li><p>实际数据仍然在 Manticore</p></li><li><p>Manticore 使用 MySQL 内置的 Federated 协议通信</p></li></ul></div></li><li><p>Schema 固定</p><div class="ulist"><ul><li><p>id:INTEGER, query:VARCHAR, INDEX(query)</p></li><li><p>id:INTEGER, snippets:VARCHAR, query:VARCHAR, INDEX(query)</p></li></ul></div></li></ul></div></div></section><section id="_http_api"><h2>HTTP API</h2><div class="slide-content"><div class="ulist"><ul><li><p>HTTP JSON API</p></li><li><p>HTTP SQL API</p></li><li><p>类 ElasticSearch</p></li><li><p>支持 VIP 通道</p></li></ul></div></div></section></section>
 <section><section id="_build_index" class="lightbg" data-background-video="videos/industrial.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Build Index</h2></section><section id="_index_basic"><h2>Index Basic</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Index Type</div><ul><li><p>Plain index</p><div class="ulist"><ul><li><p>根据已经存在的数据创建索引</p></li><li><p>一旦创建只能修改、删除，不能新增</p></li><li><p>索引创建速度快</p></li></ul></div></li><li><p>RT    index</p><div class="ulist"><ul><li><p>类似 MySQL Table</p></li><li><p>可以 增、删、改、查</p></li><li><p>写入速度为 <code>plain</code> 的 <code>1/3</code></p></li></ul></div></li><li><p>Percolate index</p><div class="ulist"><ul><li><p>输入文档，检索匹配的查询</p></li></ul></div></li></ul></div></div></div>
-<div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Plain Index</div><ul><li><p>MySQL</p></li><li><p>PostgreSQL</p></li><li><p>ODBC</p></li><li><p>XML</p></li><li><p>CSV / TSV</p></li><li><p>Script  <span class="preview">Preview</span></p></li></ul></div></div></div></div></section><section id="_字段类型"><h2>字段类型</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// var wontCompile; <i class="conum" data-value="1"></i><b>(1)</b>
-// var wontCompile = null;
-// var wontCompile = {-1, 1};
+<div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Plain Index</div><ul><li><p>MySQL</p></li><li><p>PostgreSQL</p></li><li><p>ODBC</p></li><li><p>XML</p></li><li><p>CSV / TSV</p></li><li><p>Script  <span class="preview">Preview</span></p></li></ul></div></div></div></div></section><section id="_字段类型"><h2>字段类型</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Logic</div><ul><li><p>Document ID</p></li><li><p>Text</p></li><li><p>String</p></li><li><p>Integer</p></li><li><p>Big Integer</p></li><li><p>Timestamps</p></li><li><p>Float</p></li><li><p>JSON</p></li><li><p>Multi-value integer</p></li><li><p>Multi-value big integer</p></li></ul></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">SQLDataSource</div><ul><li><p>sql_attr_bigint</p></li><li><p>sql_attr_bool</p></li><li><p>sql_attr_float</p></li><li><p>sql_attr_json</p></li><li><p><strong>sql_attr_multi</strong></p></li><li><p>sql_attr_string</p></li><li><p>sql_attr_timestamp</p></li><li><p>sql_attr_uint</p></li><li><p>&lt;field&gt;</p><div class="ulist"><ul><li><p>sql_field_string</p></li><li><p>sql_file_field</p></li><li><p>sql_joined_field</p></li></ul></div></li></ul></div></div></div></div></section><section id="_导入数据_indexer"><h2>导入数据  / Indexer</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">manticore.conf</div>
+<div class="content"><pre>source src1
+{
+    type                    = mysql
+    sql_host                = localhost
+    sql_user                = test
+    sql_pass                =
+    sql_db                  = test
+    sql_port                = 3306  # optional, default is 3306
+    sql_query               = \
+        SELECT id, group_id, \
+        UNIX_TIMESTAMP(date_added) AS date_added, \
+        title, content \
+        FROM documents
+    sql_attr_uint           = group_id
+    sql_attr_timestamp      = date_added
+}
 
-var myMap = new HashMap&lt;&gt;();
-myMap.put(42, "The answer");
-// var wontCompile = myMap.get(42).trim(); <i class="conum" data-value="2"></i><b>(2)</b>
+index test1
+{
+    source                  = src1
+    path                    = /var/lib/manticore/data/test1
+    min_infix_len   = 3
+}</pre></div></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">CLI</div>
+<div class="content"><pre>$ indexer test1  --rotate
+using config file '/etc/sphinxsearch/manticore.conf'...
+indexing index 'test1'...
+collected 4 docs, 0.0 MB
+sorted 0.0 Mhits, 100.0% done
+total 4 docs, 193 bytes
+...</pre></div></div></div></div></div></section><section id="_plain_index_building"><h2>Plain Index Building</h2><div class="slide-content"><div class="paragraph"><p><span class="image"><img src="images/diagram-indexstage.png" alt="Index Stage"></span></p></div></div></section><section id="_导入数据_rt_index"><h2>导入数据 / RT Index</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">sql</div>
+<div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">mysql&gt; CREATE TABLE myindex \
+(title text, content text, category_id integer);</code></pre></div></div>
+<div class="listingblock"><div class="title">manticore.conf</div>
+<div class="content"><pre>index rt
+{
+    type = rt
+    path = /var/lib/manticore/data/testrt
+    rt_field = title
+    rt_field = content
+    rt_attr_uint = gid
+            stored_fields = title, content
+}</pre></div></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">CLI</div>
+<div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">mysql&gt; INSERT INTO testrt VALUES \
+    ( 1, 'first record', 'test one', 123 );
+Query OK, 1 row affected (0.05 sec)
 
-// var wontCompile = String::toUpperCase; <i class="conum" data-value="3"></i><b>(3)</b>
+mysql&gt; INSERT INTO testrt VALUES \
+    ( 2, 'second record', 'test two', 234 );
+Query OK, 1 row affected (0.00 sec)
 
-var myPredicate = new IntPredicate() {
-    public boolean test(int value) {  return value &gt; 0; }  };
-// myPredicate = (int i) -&gt; (i % 2) == 0; <i class="conum" data-value="4"></i><b>(4)</b></code></pre></div></div>
-<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>Type <em>must be inferrable</em> – no late init, <code>null</code> or array literals</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td>Type <em>inferred at declaration</em> time: <code>Map&lt;Object, Object&gt;</code></td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td><em>Method references</em> must be explicit</td></tr><tr><td><i class="conum" data-value="4"></i><b>4</b></td><td><em>Anonymous Types</em> are types-per-instance; therefore no reassignment</td></tr></table></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Type <em>must be inferrable</em> – no late init, <code>null</code> or array literals</p></li><li><p>Type <em>inferred at declaration</em> time: <code>Map&lt;Object, Object&gt;</code></p></li><li><p><em>Method references</em> must be explicit</p></li><li><p><em>Anonymous Types</em> are types-per-instance; therefore no reassignment</p></li></ul></div></aside></div></section><section id="_lambda_type_inference_jep_323" class="bonuscontent"><h2>Lambda Type inference <span class="jep"><a href="https://openjdk.java.net/jeps/323">JEP 323</a></span></h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// JDK8
-MyLambda myLambda = (x, y) -&gt; x + ((y != null) ? y : 0);
-myLambda = (Long x, @NotNull Long y) -&gt; x + y;
+mysql&gt; SELECT * FROM testrt WHERE MATCH('first one');
++------+------+--------------+----------+
+| id   | gid  | title        | content  |
++------+------+--------------+----------+
+|    1 |  123 | first record | test one |
++------+------+--------------+----------+
 
-// JDK11: `var` style → type infer with annotations
-myLambda = (var x, @NotNull var y) -&gt; x + y;</code></pre></div></div></div></section><section id="_type_inference_styleguide"><h2>Type inference: Styleguide</h2><div class="slide-content"><div class="videoblock stretch"><video src="videos/type-infer-styleguide.mp4" width="100%" height="100%" poster="images/Style%20Guidelines%20for%20Local%20Variable%20Type%20Inference%20in%20Java" controls>Your browser does not support the video tag.</video></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="http://openjdk.java.net/projects/amber/LVTIstyle.html">Style Guidelines for Local Variable Type Inference in Java</a></p></li></ul></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>May hide things: Project wrote a styleguide with recommendations</p></li><li><p>Don&#8217;t make source-code reading a puzzle</p></li></ul></div></aside></div></section><section id="_milling_project_coin_jep_213"><h2>Milling Project Coin <span class="jep"><a href="https://openjdk.java.net/jeps/213">JEP 213</a></span></h2><div class="slide-content"><div class="listingblock"><div class="title">Try-with-resources now support „effectively final“ variables</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var inputStream = new FileInputStream(".gitignore");
-try (inputStream) { … }</code></pre></div></div>
-<div class="openblock tgap fragment"><div class="content"><div class="listingblock"><div class="title">Private methods in Interfaces</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">interface Version {
-    byte[] digits();
-    default String text() { return text(digits()); }
-    private String text(byte[] version) { … }
-}</code></pre></div></div>
-<div class="paragraph"><p><span class="verydecent">Allows default methods share common code</span></p></div></div></div>
-<aside class="notes"><div class="paragraph"><p>Milling Project Coin: A long runner project. Continously delivering small enhancement changes to Java</p></div></aside></div></section><section id="_milling_project_coin" class="bonuscontent"><div class="slide-content"><div class="listingblock"><div class="title">Diamond operator for anonymous inner classes</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">Comparator&lt;Integer&gt; compareLongs = new Comparator&lt;&gt;() { … }</code></pre></div></div>
-<div class="openblock tgap fragment"><div class="content"><div class="listingblock"><div class="title"><code>@SafeVargs</code> on private instance methods</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">private List&lt;String&gt; safeVarargsMethod(List&lt;String&gt;... lists) { … }</code></pre></div></div></div></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p>(1) <a href="https://www.javaworld.com/article/3169388/java-9s-other-new-enhancements-part-2.html">Java 9&#8217;s other new enhancements, Part 2: Milling Project Coin</a></p></li></ul></div></div></div></div></section><section id="_preview_features_preview_12"><h2>Preview features <span class="preview">Preview</span> <span class="version">12</span></h2><div class="slide-content"><div class="openblock col2"><div class="content"><div class="listingblock"><div class="title">Unlock Compilation</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="bash" class="language-bash hljs" data-noescape="true">javac --release xx --enable-preview</code></pre></div></div></div></div>
-<div class="openblock col2"><div class="content"><div class="listingblock"><div class="title">Unlock Execution</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="bash" class="language-bash hljs" data-noescape="true">java --enable-preview …</code></pre></div></div></div></div>
-<div class="openblock clear"><div class="content"><div class="paragraph"><p> <br>
-<span class="decent"><code>xx</code> must <em>exactly</em> match used JDK version</span></p></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>New in Java 12</p></li><li><p>Allow to preview/use features.</p></li><li><p>Forces awareness by using toggle switch on <em>compiling and running</em></p></li></ul></div></aside></div></section><section id="_switch_in_java_8" data-transition="fade-out"><h2><code>switch</code> in Java 8</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">    enum Direction {N, S, W, E}
+mysql&gt; FLUSH RAMCHUNK testrt;
+Query OK, 0 rows affected (0.05 sec)
 
-    String switchExpressionJDK8(Direction way) {
-        String result;
-        switch (way) {
-            case N:
-                result = "Up";
-                break;
-            case S:
-                result = "Down";
-                break;
-            case E:
-            case W:
-                result = "Somewhere left or right";
-                break;
-            default:
-                throw new IllegalStateException("Huh?: " + way);
-        }
-        return result;
-    }</code></pre></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Error-prone</p><div class="ulist"><ul><li><p>forget <code>break</code></p></li><li><p>must have a <code>default</code></p></li></ul></div></li><li><p>Clumsy: Temporary assign a variable</p></li></ul></div></aside></div></section><section id="_switch_expression_jep_325_12_jep_354_13_preview" data-transition="fade-in"><h2>Switch-Expression <span class="jep"><a href="https://openjdk.java.net/jeps/325">JEP 325</a></span> <span class="version">12</span> <span class="jep"><a href="https://openjdk.java.net/jeps/354">JEP 354</a></span> <span class="version">13</span> <span class="preview">Preview</span></h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">String switchExpressionPreview13(Direction way) {
-    return switch (way) {                         <i class="conum" data-value="1"></i><b>(1)</b>
-        case N -&gt; "Up";                           <i class="conum" data-value="2"></i><b>(2)</b>
-        case S -&gt; { yield "Down"; }               <i class="conum" data-value="3"></i><b>(3)</b>
-        case E, W -&gt; "Somewhere left or right";
-        // default -&gt; "Foo"                       <i class="conum" data-value="4"></i><b>(4)</b>
-    };
-}</code></pre></div></div>
-<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td><code>switch</code> can be used as expression</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td><code>&#8594;</code> instead of <code>:</code> → no <code>break;</code> necessary!</td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td>Lambdas can be used to. For <em>expressions</em> they must <code>yield</code> a value <span class="version">13</span></td></tr><tr><td><i class="conum" data-value="4"></i><b>4</b></td><td><code>default</code> can be ommitted if a) no expression or b) <code>enum</code> with every value handled</td></tr></table></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Preview kommt durchaus zum Einsatz:  Switch-Expression wurde mit Java 12 eingeführt und in Java 13 verändert.</p></li><li><p><code>switch</code> can be used as expression</p></li><li><p><code>&#8594;</code> instead of <code>:</code> → no <code>break;</code> necessary!</p></li><li><p>Lambdas can be used to. For <em>expressions</em> they must <code>yield</code> a value <span class="version">13</span>
-+ <code>default</code> can be ommitted if a) no expression or b) <code>enum</code> with every value handled</p></li></ul></div></aside></div></section><section id="_text_blocks_jep_355_13_preview"><h2>Text Blocks <span class="jep"><a href="https://openjdk.java.net/jeps/355">JEP 355</a></span> <span class="version">13</span> <span class="preview">Preview</span></h2><div class="slide-content"><div class="openblock col2"><div class="content"><div class="listingblock"><div class="title">Java 8</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">Object obj = engine.eval(
-    "function hello() {\n" +
-    "   print(\"Hi, world!\");\n" +
-    "}\n" +
-    "\n"  +
-    "hello();\n"
-    );</code></pre></div></div></div></div>
-<div class="openblock col2"><div class="content"><div class="listingblock"><div class="title">Java 13</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">Object obj = engine.eval("""
-    function hello() {
-       print("Hi, world!");
+mysql&gt; OPTIMIZE INDEX testrt;
+Query OK, 0 rows affected (0.00 sec)</code></pre></div></div></div></div></div></section><section id="_导入数据_rt_index_batch"><h2>导入数据 / RT Index / Batch</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">DROP TABLE IF EXISTS test.documents;
+CREATE TABLE test.documents
+(
+     id                      INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+     group_id        INTEGER NOT NULL,
+     date_added      DATETIME NOT NULL,
+     title           VARCHAR(255) NOT NULL,
+     content         TEXT NOT NULL
+);
+
+INSERT INTO test.documents ( id, group_id,  date_added, title, content ) VALUES
+     ( 1, 1, NOW(), 'test one', 'this is my test document number one. also checking search within phrases.' ),
+     ( 2, 1, NOW(), 'test two', 'this is my test document number two' ),
+     ( 3, 2, NOW(), 'another doc', 'this is another group' ),
+     ( 4, 2, NOW(), 'doc number four', 'this is to test groups' );</code></pre></div></div></div></section></section>
+<section><section id="_query" class="lightbg" data-background-video="videos/keyboard.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Query</h2></section><section id="_overview"><h2>Overview</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Mode</div><ul><li><p>SPH_MATCH_ALL</p></li><li><p>SPH_MATCH_ANY</p></li><li><p>SPH_MATCH_PHRASE</p></li><li><p><strong>SPH_MATCH_BOOLEAN</strong></p></li><li><p><strong>SPH_MATCH_EXTENDED</strong></p></li><li><p>SPH_MATCH_FULLSCAN</p></li></ul></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Ranker</div><ul><li><p><strong>SPH_RANK_PROXIMITY_BM25</strong></p></li><li><p>SPH_RANK_BM25</p></li><li><p><strong>SPH_RANK_NONE</strong></p></li><li><p>SPH_RANK_WORDCOUNT</p></li><li><p>SPH_RANK_PROXIMITY</p></li><li><p>SPH_RANK_MATCHANY</p></li><li><p>SPH_RANK_FIELDMASK</p></li><li><p>SPH_RANK_SPH04</p></li><li><p><strong>SPH_RANK_EXPR</strong></p></li></ul></div></div></div></div></section><section id="_extended_query_syntax"><h2>Extended query syntax</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">OR</div>
+<div class="content"><pre>hello | world</pre></div></div>
+<div class="listingblock"><div class="title">MAYBE</div>
+<div class="content"><pre>hello MAYBE world</pre></div></div>
+<div class="listingblock"><div class="title">NOT</div>
+<div class="content"><pre>hello -world
+hello !world</pre></div></div>
+<div class="listingblock"><div class="title">field search</div>
+<div class="content"><pre>@title hello @body world
+@body[50] hello
+@(title,body) hello world
+@!title hello world
+@!(title,body) hello world
+@* hello</pre></div></div>
+<div class="listingblock"><div class="title">phrase</div>
+<div class="content"><pre>"hello world"</pre></div></div>
+<div class="listingblock"><div class="title">proximity</div>
+<div class="content"><pre>"hello world"~10</pre></div></div>
+<div class="listingblock"><div class="title">quorum matching</div>
+<div class="content"><pre>"the world is a wonderful place"/3</pre></div></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="title">strict order</div>
+<div class="content"><pre>aaa &lt;&lt; bbb &lt;&lt; ccc</pre></div></div>
+<div class="listingblock"><div class="title">exact form</div>
+<div class="content"><pre>raining =cats and =dogs</pre></div></div>
+<div class="listingblock"><div class="title">field-start and field-end</div>
+<div class="content"><pre>^hello world$</pre></div></div>
+<div class="listingblock"><div class="title">keyword IDF boost</div>
+<div class="content"><pre>boosted^1.234 boostedfieldend$^1.234</pre></div></div>
+<div class="listingblock"><div class="title">NEAR / SENTENCE / PARAGRAPH</div>
+<div class="content"><pre>hello NEAR/3 world NEAR/4 "my test"
+all SENTENCE words SENTENCE "in one sentence"
+"Bill Gates" PARAGRAPH "Steve Jobs"</pre></div></div>
+<div class="listingblock"><div class="title">NOTNEAR</div>
+<div class="content"><pre>Church NOTNEAR/3 street</pre></div></div></div></div></div></section><section id="_extended_query_syntax_zone"><h2>Extended query syntax / ZONE</h2><div class="slide-content"><div class="ulist"><ul><li><p>默认为 HTML / XML 文档设置，需要显式开启</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre>index_zones = h*, th, title</pre></div></div>
+<div class="ulist"><ul><li><p>与字段查询类似，但是不要求在同一个zone 中</p></li><li><p>目前需要开启 posting position.</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre>(ZONE:th hello world)</pre></div></div></div></section><section id="_query_sphinxql"><h2>Query / SphinxQL</h2><div class="slide-content"><div class="listingblock"><div class="title">Basic Query</div>
+<div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">mysql&gt; SELECT * FROM test_index WHERE MATCH ('pile box') AND channel_id&lt;1000 GROUP BY group_id;</code></pre></div></div>
+<div class="listingblock"><div class="title">Schema On Read</div>
+<div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">mysql&gt; SELECT id, abc('mtype', 'ipv4', 'hello') as k, abc('mtype', 'ipv4', 'hello') as y, \
+       abc() as c from csv where c &gt; 0 option \
+       schema=abc('body:org\\.apache\\.hadoop\\.(?P&lt;mtype&gt;[\\w\\.]+)') \
+       FACET abc('mtype', 'ipv4', 'hello') as g;
+
+|   22 | hdfs.server.datanode.web.DatanodeHttpServer         | hdfs.server.datanode.web.DatanodeHttpServer         |    2 |
+|   23 | hdfs.server.datanode.DataNode                       | hdfs.server.datanode.DataNode                       |    2 |
+...</code></pre></div></div></div></section><section id="_query_facet"><h2>Query / FACET</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">mysql&gt; SELECT *, IN(brand_id,1,2,3,4) AS b FROM facetdemo WHERE MATCH('Product') AND b=1 LIMIT 0,3
+FACET brand_name, brand_id BY brand_id ORDER BY brand_id ASC
+FACET INTERVAL(price,200,400,600,800) ORDER BY FACET() ASC
+FACET categories ORDER BY FACET() ASC;
++------+-------+----------+-------------------+-------------+----------+------------+------+
+| id   | price | brand_id | title             | brand_name  | property | categories | **   |
++------+-------+----------+-------------------+-------------+----------+------------+------+
+|    1 |   668 |        3 | Product Four Six  | Brand Three | Three    | 11,12,13   |    1 |
+|    2 |   101 |        4 | Product Two Eight | Brand Four  | One      | 12,13,14   |    1 |
+|    8 |   750 |        3 | Product Ten Eight | Brand Three | Five     | 13         |    1 |
++------+-------+----------+-------------------+-------------+----------+------------+------+
++-------------+----------+----------+
+| brand_name  | brand_id | count(*) |
++-------------+----------+----------+
+| Brand One   |        1 |     1012 |
+| Brand Two   |        2 |     1025 |
++-------------+----------+----------+
++---------------------------------+----------+
+| interval(price,200,400,600,800) | count(*) |
++---------------------------------+----------+
+|                               0 |      799 |
+|                               1 |      795 |
+...</code></pre></div></div></div></section><section id="_query_json"><h2>Query / JSON</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="JSON" class="language-JSON hljs" data-noescape="true">{
+  key1: {
+    key2: {
+      key3: "value"
     }
-
-    hello();
-    """);</code></pre></div></div></div></div>
-<div class="openblock small decent"><div class="content"><div class="ulist"><ul><li><p>Leading space-Character identation removed<br>
-up to the most-left character in the block including the closing <code>"""</code></p></li><li><p>Normalizes line-endings to <code>\n</code> and removes all trailing white spaces</p></li></ul></div></div></div>
-<aside class="notes"></aside></div></section><section id="_jigsaw_jep_201"><h2>Jigsaw <span class="jep"><a href="https://openjdk.java.net/jeps/201">JEP 201</a></span></h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>Modules bundle together one or more packages
-and offer stronger encapsulation than jars</p></div></blockquote></div>
-<div class="ulist"><ul><li><p>Allows <strong>scaled-down runtime</strong>  &rarr; IoT &amp; Container</p></li><li><p><strong>Stronger:</strong> <code>public</code> invisible to other modules</p></li><li><p><em>Sad:</em> No module versioning</p></li></ul></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Only briefly: Most of you will know</p></li><li><p><strong>1 package = 1 module</strong></p></li></ul></div></aside></div></section><section id="_jigsaw" data-transition="fade-out"><div class="slide-content"><div class="listingblock"><div class="title">Metadata: <code>/module-info.java</code>:</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">module com.mysql.jdbc {
-    requires java.sql;             // Module dependency
-    exports com.mysql.jdbc;        // Export module package → enables access
-    provides java.sql.Driver       // SPI: Provide service instance
-        with com.mysql.jdbc.Driver;
+  }
 }</code></pre></div></div>
-<div class="openblock tgap fragment"><div class="content"><div class="listingblock"><div class="title">Jigsaw uses modules &amp; <code>.jmod</code> instead of Classpath &amp; <code>.jar</code></div>
-<div class="content"><pre>javac -mp modulepath ...
-java  -mp modulepath -m modulename/moduleclass</pre></div></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Metadata described in <code>module-info.java</code></p></li><li><p><strong>Either-Or!</strong> You stay in classpath/JAR mode oder switch to modules /jmod</p></li></ul></div></aside></div></section><section id="_serviceloader_modules" class="bonuscontent"><h2><code>ServiceLoader</code> &amp; modules</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">public abstract class BillingService {
-    public static BillingService getInstance() {
-        return ServiceLoader.load(BillingService.class)
-                .findFirst().orElseThrow();
-    }
-
-    public abstract String takeMyMoney();
-}</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">public class MastercardBillingService extends BillingService { … }</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">module anothermodule {
-    provides bentolor.BillingService
-       with bentolor.MastercardBillingService;
-}</code></pre></div></div>
-<div class="paragraph"><p>→ Simply use via <code>BillingService.getInstance()</code></p></div></div></section><section id="_jigsaw_conclusion" data-transition="fade-in"><div class="slide-content"><div class="quoteblock"><blockquote>It is too early to say whether modules will achieve widespread
-use outside of the JDK itself. In the meantime, it seems best to
-avoid them unless you have a compelling need.</blockquote><div class="attribution"><cite>Effective Java: Third Edition (2018)</cite><br>&#8212; Joshua Bloch</div></div></div></section></section>
-<section><section id="_api" class="lightbg" data-background-video="videos/keyboard.mp4" data-background-video-loop data-background-opacity="0.7"><h2>API</h2></section><section id="_immutable_collection_factories_jep_269"><h2>Immutable Collection Factories <span class="jep"><a href="https://openjdk.java.net/jeps/269">JEP 269</a></span></h2><div class="slide-content"><div class="listingblock"><div class="title"><code>List/Set/Map.of()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">/* Comment sections would break ... */
-List&lt;Integer&gt; listOfNumbers     = List.of(1, 2, 3, 4, 5/*, null*/);
-
-Set&lt;Integer&gt; setOfNumbers       = Set.of(1, 2, 3, 4, 5/*, 1*/);
-
-Map&lt;String, String&gt; mapOfString = Map.of("key1", "value1", "key2", "value2");
-
-Map&lt;String, String&gt; moreMaps    = Map.ofEntries(
-        Map.entry("key1", "value1"),
-        Map.entry("key2", "value2")/*,
-        Map.entry("key1", "value3")*/
-);</code></pre></div></div>
-<div class="openblock decent"><div class="content"><div class="paragraph"><p>Produces <em>immutable</em> collections. All methods <em>fail on <code>null</code> values.</em> <br>
-<code>Set.of()</code> and <code>Map.of()</code> break on <em>duplicate</em> (key) entries.</p></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Long overdue. Sth. I always did on my own in nearly every project.</p></li></ul></div></aside></div></section><section id="_immutable_collection_copy"><h2>Immutable collection copy</h2><div class="slide-content"><div class="listingblock"><div class="title"><code>List/Set/Map.copyOf()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var listCopy = List.copyOf(originalList);  // independent, immutable copy
-var setCopy  =  Set.copyOf(originalList);  // copy to other types
-var mapCopy  =  Map.copyOf( … );
-
-assert 3 == listCopy.size();  // ["a", "b", "a"]
-assert 2 == setCopy.size();   // ["a", "b"]
-
-// listCopy.add("z")          // → UnsupportedOperationException</code></pre></div></div>
-<div class="openblock tgap small"><div class="content"><div class="paragraph"><p><span class="decent"><em>Real copies</em> – independent from source vs. <code>Collections.unmodifiable()</code></span></p></div></div></div></div></section><section id="_files_io"><h2>Files &amp; I/O</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var txtPath = Path.of("src", "test", "resources", "sample.txt");         <i class="conum" data-value="1"></i><b>(1)</b>
-Path newPath = Path.of("src/test/resources/newfile.txt");
-
-String fileContent = Files.readString(txtPath);                          <i class="conum" data-value="2"></i><b>(2)</b>
-// → "Nostrum iure ullam."
-
-Files.writeString(newPath, "Nostrum lore.", StandardOpenOption.CREATE);  <i class="conum" data-value="3"></i><b>(3)</b>
-
-long firstMismatch = Files.mismatch(txtPath, newPath); // → 8  | JDK12   <i class="conum" data-value="4"></i><b>(4)</b></code></pre></div></div>
-<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>Directly create <code>Path</code>-instances</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td>Hassle-free reading a file content into a string</td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td>…or writing into files</td></tr><tr><td><i class="conum" data-value="4"></i><b>4</b></td><td>Find position of first mismatching bytes of two Files <span class="version">12</span></td></tr></table></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Hassle-free reading a file content into a string or writing into files</p></li><li><p>Find position of first mismatching bytes of two Files <span class="version">12</span></p></li></ul></div></aside></div></section><section id="_stream_enhancements" class="bonuscontent"><h2>Stream Enhancements</h2><div class="slide-content"><div class="olist arabic"><ol class="arabic"><li><p><strong>Transform</strong> with <code>dropWhile()</code> &amp; <code>takeWhile()</code></p></li><li><p><strong>Generate</strong> with <code>iterate()</code> &amp; <code>ofNullable()</code>)</p></li><li><p><strong>Redirect</strong> with <code>transferTo()</code></p></li><li><p>Collect <strong>to immutables</strong> with <code>toUnmodifiableList()</code>,</p></li><li><p>… or <strong>invert</strong> filters with <code>Predicate.not()</code></p></li></ol></div></div></section><section id="_transform_generate_streams"><h2>Transform &amp; Generate Streams</h2><div class="slide-content"><div class="openblock fragment"><div class="content"><div class="listingblock"><div class="title">Modify with <code>dropWhile()</code> &amp; <code>takeWhile()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var stream = Stream.of(-1, 0, 1, 21, 42);
-
-stream.dropWhile(i -&gt; i &lt; 2)     // → [ 21, 42   ]
-stream.takeWhile(i -&gt; i &lt; 2)     // → [ -1, 0, 1 ]</code></pre></div></div></div></div>
-<div class="openblock fragment"><div class="content"><div class="listingblock"><div class="title">Redirect with <code>transferTo()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">new ByteArrayInputStream(buf)
-        .transferTo(System.out);    // InputStream → OutputStream</code></pre></div></div></div></div>
-<div class="openblock fragment"><div class="content"><div class="listingblock"><div class="title">Generate with <code>iterate()</code> &amp; <code>ofNullable()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// Stream&lt;T&gt; iterate​(seedValue, nextTest, applyFunc)
-Stream.iterate(2, i -&gt; i &lt; 999,  i -&gt; i*i);     // → [2, 4, 16, 256]
-
-Stream.ofNullable(null);                        // [ ]
-Stream.ofNullable("Hi");                        // [ "Hi" ]</code></pre></div></div></div></div>
-<aside class="notes"><div class="olist arabic"><ol class="arabic"><li><p>Werte anhand eines Filters überspringen oder begrenzen</p></li><li><p>Streams umleiten</p></li><li><p>Iterate-Stream oder Stream mit 0 oder 1 Element</p></li></ol></div></aside></div></section><section id="_collectors" class="left"><h2>Collectors</h2><div class="slide-content"><div class="listingblock"><div class="title">Dispatch a stream to two consuming Collectors with <code>teeing()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">double rms(Stream&lt;Integer&gt; numStream) {
-    return rms = numStream.collect(
-            Collectors.teeing(
-                    Collectors.summingDouble(i -&gt; i * i),   // → sum
-                    Collectors.counting(),                  // → n
-                    (sum, n) -&gt; Math.sqrt(sum / n) // Join into final result
-            )
-    );
-}</code></pre></div></div>
-<div class="openblock tgap fragment small"><div class="content"><div class="ulist"><div class="title">More new <code>Collectors</code> goodness…</div><ul><li><p>Create immutable Stream copies with <code>toUnmodifiableList/set/Map()</code></p></li><li><p>unpack nested values using <code>flatMap()</code></p></li><li><p>filter out unwanted values using <code>filtering()</code></p></li></ul></div></div></div></div></section><section id="_predicatenot"><div class="slide-content"><div class="listingblock"><div class="title"><code>Predicate::not</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">stream.filter(s -&gt; !s.isEmpty)</code></pre></div></div>
-<div class="openblock fragment"><div class="content"><div class="listingblock"><div class="title"><span class="icon"><i class="fa fa-angle-double-down"></i></span></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">stream.filter(Predicate.not(String::isEmpty))</code></pre></div></div></div></div>
-<div class="openblock fragment"><div class="content"><div class="listingblock"><div class="title"><span class="icon"><i class="fa fa-angle-double-down"></i></span></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">stream.filter(not(String::isEmpty))</code></pre></div></div></div></div></div></section><section id="_enhanced_optional"><h2>Enhanced <code>Optional</code></h2><div class="slide-content"><div class="listingblock"><div class="title">New <code>ifPresentOrElse()</code>, <code>or()</code>, <code>stream()</code> and <code>isPresent()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var maybeInt = Optional.ofNullable( (Math.random()&lt;0.5) ? 42 : null );
-
-maybeInt.ifPresentOrElse(                       // … do either this or that
-        (n) -&gt; System.out.println(n),
-        () -&gt; System.out.println("Nada")   );</code></pre></div></div>
-<div class="listingblock source fragment"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// Optional empty? → Build a new one on-the-fly…
-var triedAgain = maybeInt.or( () -&gt; Optional.of(-1) );</code></pre></div></div>
-<div class="listingblock source fragment"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// Provide a stream → [] or [42]
-Stream&lt;Integer&gt; intStream = maybeInt.stream();</code></pre></div></div>
-<div class="listingblock source fragment"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">// Yay! – complements isPresent()
-assert maybeInt.isPresent() == !maybeInt.isEmpty();</code></pre></div></div></div></section><section id="_new_processhandle_and_processbuilder"><h2>New <code>ProcessHandle</code> and <code>ProcessBuilder</code></h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">Process sleeper = new ProcessBuilder("sleep", "10s").start();
-ProcessHandle sleepHandle = sleeper.toHandle();
-
-// Perform Runnables on process exit
-sleepHandle.onExit().thenRun(                       // → CompletableFuture
-        () -&gt; out.println("`sleep` process exited")  );
-
-out.println(sleepHandle.info());
-// → [user: ben, cmd: /bin/sleep, args: [10s], startTime:…, totalTime: …]
-
-// Find …
-ProcessHandle jvm = ProcessHandle.current();              // … JVM,
-Stream&lt;ProcessHandle&gt; all = ProcessHandle.allProcesses(); // … all processes
-jvm.children().forEach(out::println);                     // … or childs
-
-// Kill …
-sleepHandle.destroy();</code></pre></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>much more convenient</p></li><li><p>provides <strong>more info</strong> and <strong>more control</strong></p></li><li><p>aid the creation of process pipelines</p></li></ul></div></aside></div></section><section id="_enhanced_deprecation_policy" class="left"><h2>Enhanced Deprecation policy</h2><div class="slide-content"><div class="listingblock"><div class="title"><code>@Deprecated</code> now wears a <code>forRemoval</code> flag</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">@Deprecated(since="1.2", forRemoval=true)
-public final synchronized void stop(Throwable obj) {
-    throw new UnsupportedOperationException();
-}</code></pre></div></div>
-<div class="openblock tgap fragment"><div class="content"><div class="listingblock x-small"><div class="title"><code>jdeprscan</code>: Scan Jars for deprecated usages</div>
-<div class="content"><pre>$ jdeprscan commons-math3-3.6.1.jar
-Jar file commons-math3-3.6.1.jar:
-class org/apache/commons/math3/fraction/BigFraction uses deprecated method java/math/BigDecimal::divide(Ljava/math/BigDecimal;II)…;
-class org/apache/commons/math3/util/MathUtils uses deprecated method java/lang/Double::&lt;init&gt;(D)V
-class org/apache/commons/math3/util/Precision uses deprecated method java/math/BigDecimal::setScale(II)Ljava/math/BigDecimal;</pre></div></div>
-<div class="paragraph"><p><span class="verydecent">can filter for deprecated methods marked for removal</span></p></div></div></div></div></section><section id="_stackwalker" class="bonuscontent"><h2>StackWalker</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">StackWalker.getInstance().walk(s -&gt;
-        s.map( frame -&gt; frame.getClassName()+ '/' +frame.getMethodName() )
-                .filter(name -&gt; name.startsWith("de.bentolor"))
-                .limit(10)
-                .collect(Collectors.toList())
-).forEach(out::println);</code></pre></div></div></div></section><section id="_http2_client_jep_110_jep_321"><h2>HTTP/2 Client <span class="jep"><a href="https://openjdk.java.net/jeps/110">JEP 110</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/321">JEP 321</a></span></h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">HttpClient client = HttpClient.newBuilder()                              <i class="conum" data-value="1"></i><b>(1)</b>
-            .version(HttpClient.Version.HTTP_2)                          <i class="conum" data-value="2"></i><b>(2)</b>
-            .connectTimeout(Duration.ofSeconds(3)).build();
-
-URI uri = URI.create("https://www.exxcellent.de/");
-HttpRequest req = HttpRequest.newBuilder(uri)
-        .header("Useragent", "MyDemo").GET().build();
-
-var future = client.sendAsync(req, HttpResponse.BodyHandlers.ofString()) <i class="conum" data-value="3"></i><b>(3)</b>
-        .thenApply(HttpResponse::body)
-        .thenAccept(System.out::println);
-
-var expensiveOperation = Math.pow(12345, 9876);  // meanwhile do sth. else…
-future.get();              // wait for completion of the background request</code></pre></div></div>
-<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td><strong>Fluent API</strong> and <strong>Builder Pattern</strong></td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td><strong>Standardized HTTP client</strong> capable of <strong>HTTP/2</strong> and <strong>WebSocket</strong> connections!</td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td>Start <strong>asynchronously</strong> HTTP requests in the background</td></tr></table></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Standardized HTTP client capable of WebSocket connections!</p><div class="ulist"><ul><li><p>Java 8 UrlConnection too abstract</p></li><li><p>New client: Fluent API</p></li></ul></div></li><li><p>Support for asynchronous requests!</p></li><li><p>Support for Proxying, Cookies, Authentication</p></li></ul></div></aside></div></section><section id="_websocket_client" class="bonuscontent"><h2>WebSocket client</h2><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">var wsBuilder = HttpClient.newHttpClient().newWebSocketBuilder();
-var wsFuture = wsBuilder.buildAsync(URI.create("wss://echo.websocket.org"),
-
-        new WebSocket.Listener() {
-            onOpen(webSocket) { …  }
-            onText(webSocket, data, last) { … }
-            onBinary(webSocket, data,last) { … }
-            onPing(webSocket, message) { … }
-            onPong(webSocket, message) { … }
-            onClose(webSocket, statusCode, reason) { … }
-            onError(webSocket, error) { …  }
-        });
-
-WebSocket websocket = wsFuture.join();
-websocket.sendText("Ping!", true);
-websocket.sendClose(NORMAL_CLOSURE, "Goodbye!").join();</code></pre></div></div></div></section><section id="_reactive_streams"><h2>Reactive Streams</h2><div class="slide-content"><div class="paragraph"><p><code>java.util.concurrent.Flow</code></p></div>
-<div class="paragraph"><p>JDK Standard of <a href="https://www.reactive-streams.org" class="bare">https://www.reactive-streams.org</a><br>
-for <strong>asynchronous stream processing</strong><br>
-with <strong>non-blocking backpressure</strong></p></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="https://github.com/reactive-streams/reactive-streams-jvm/blob/v1.0.2/README.md">Reactive Streams JVM Speciifcation</a></p></li></ul></div></div></div>
-<aside class="notes"><div class="paragraph"><p>The main goal of Reactive Streams is to govern the exchange of stream data across an asynchronous boundary – think passing elements on to another thread or thread-pool — while ensuring that the receiving side is not forced to buffer arbitrary amounts of data.</p></div></aside></div></section><section id="_deprecation_of_finalize"><h2>Deprecation of <code>finalize()</code></h2><div class="slide-content"><div class="quoteblock"><div class="title">Motivation</div><blockquote><div class="paragraph"><p>Finalizers are inherently problematic and their use can lead to performance
-issues, deadlocks, hangs, and other problematic behavior.</p></div></blockquote></div>
-<div class="openblock pc70 left fragment"><div class="content"><div class="paragraph"><p>No <code>forRemoval=true</code> yet&#8201;&#8212;&#8201;probably for long!</p></div></div></div>
-<div class="openblock pc70 left tgap decent fragment x-small"><div class="content"><div class="paragraph"><p>New way: Register <code>Cleaner</code> services for your objects.<br>
-They will receive <code>PhantomReference</code> to objects which are no longer reachable.</p></div></div></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="https://bugs.openjdk.java.net/browse/JDK-8165641">JDK-8165641 Deprecate Object.finalize</a></p></li><li><p><a href="https://stuartmarks.wordpress.com/2017/04/17/deprecation-of-object-finalize/">Deprecation of Object.finalize()</a></p></li></ul></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Problem: Calling <code>finalize()</code> on an object allows it “resurrection” → GC problem</p></li><li><p>are <code>notforremoval</code> and probably for long. Port all JDK and then wait for important lcients to follow</p></li></ul></div></aside></div></section><section id="_string_enhancements" class="bonuscontent"><h2>String enhancements</h2><div class="slide-content"><div class="listingblock"><div class="title">Java 11: Adopting new <code>Character.isWhitespace()</code></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">" \tword\u0019 \r".trim()          // → "word";      (Java 8)
-
-// New methods based on `Character.isWhitespace(char)`
-" \tword\u0019 \r".strip()         // → "word\u0019"
-" \tword\u0019 \r".stripLeading()  // → "word\u0019 \r"
-" \tword\u0019 \r".stripTrailing() // → " \tword\u0019"
-" \t".isBlank()                    // → true</code></pre></div></div>
-<div class="listingblock"><div class="title">Java 12 utilities <span class="version">12</span></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">"hi\r\n  you!".indent(2)   // →  "  hi\n    you!\n");
-"hi\r\n  you!".indent(-1)  // →  "hi\n you!\n");
-
-Stream&lt;String&gt; l = "1\n2\n3\n!".lines();
-IntStream stream = "word".chars();
-
-"ABC".transform(String::toLowerCase), "abc");</code></pre></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Indents: Obviously eat-your-own-dogfood Preparation to Text Block. More in 13</p></li></ul></div></aside></div></section><section id="_jdk_api_changes" class="small lightbg" data-background-video="videos/api-diff-scroll.mp4" data-background-opacity="0.6"><h2><span class="icon"><i class="fa fa-tags"></i></span> JDK API Changes</h2><div class="slide-content"><div class="paragraph"><p><a href="https://github.com/marchof/java-almanac">JDK API Changes Java Almanac</a></p></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p>Source: <a href="https://github.com/marchof/java-almanac">Java Almanac (Marc R. Hoffmann)</a></p></li><li><p><a href="https://github.com/AdoptOpenJDK/jdk-api-diff">Event more detailed API comparison</a></p></li></ul></div></div></div></div></section></section>
-<section><section id="_tooling" class="lightbg" data-background-video="videos/hammer.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Tooling</h2></section><section id="_repls_jshell_jep_222" data-background-size="contain" data-background-video="videos/jshell-demo.mp4"></section><section id="_repls_jshell_jep_222_2"><h2>REPLS: <code>jshell</code> <span class="jep"><a href="https://openjdk.java.net/jeps/222">JEP 222</a></span></h2><div class="slide-content"><div class="listingblock small col2"><div class="content"><pre>$ jshell
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="JSON" class="language-JSON hljs" data-noescape="true">{
+  "a": [
+    1, 2, 3, 4
+  ],
+  "t": [
+    "t1", "t2", "t3"
+  ]
+}</code></pre></div></div></div></div>
+<div class="openblock col2 x-small"><div class="content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">SELECT  j.key1.key2.key3 FROM index WHERE   j.key1.key2.key3='value';</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="SQL" class="language-SQL hljs" data-noescape="true">SELECT * FROM index WHERE j.a[0]=1</code></pre></div></div></div></div></div></section></section>
+<section><section id="_index_lifecycle_management" class="lightbg" data-background-video="videos/hammer.mp4" data-background-video-loop data-background-opacity="0.7"><h2>Index Lifecycle Management</h2></section><section id="_create"><h2>Create</h2></section><section id="_load_rotate"><h2>Load &amp; Rotate</h2></section><section id="_shard"><h2>Shard</h2></section><section id="_failover"><h2>Failover</h2></section><section id="_distributed"><h2>Distributed</h2></section><section id="_consensus"><h2>Consensus</h2></section><section id="_repls_jshell_jep_222" data-background-size="contain" data-background-video="videos/jshell-demo.mp4"></section><section id="_repls_jshell_jep_222_2"><h2>REPLS: <code>jshell</code> <span class="jep"><a href="https://openjdk.java.net/jeps/222">JEP 222</a></span></h2><div class="slide-content"><div class="listingblock small col2"><div class="content"><pre>$ jshell
 |  Welcome to JShell -- Version 13-ea
 |  For an introduction type: /help intro
 
@@ -591,87 +473,7 @@ public class BenchmarkIntegers {
 <span class="decent">Replaces: <code>javac -source N -target N –bootclasspath rtN.jar</code></span></p></div>
 <div class="openblock tgap fragment"><div class="content"><div class="paragraph"><div class="title"><span class="icon"><i class="fa fa-cube"></i></span> Packaging: Multi-release JAR <span class="jep"><a href="https://openjdk.java.net/jeps/238">JEP 238</a></span></div><p>JAR Files can now contain multiple, version-specific versions classes</p></div></div></div></div></section><section id="_html5_javadoc_jep_221_jep_224_jep_225" class="bonuscontent"><h2>HTML5 Javadoc <span class="jep"><a href="https://openjdk.java.net/jeps/221">JEP 221</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/224">JEP 224</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/225">JEP 225</a></span></h2><div class="slide-content"><div class="ulist"><ul><li><p>Enable via <code>-html5</code> parameter</p></li><li><p>Search box for easy navigation</p></li><li><p>HTML5 output; no more frames</p></li><li><p>Improved DocLint: <code>-Xdoclint/package:java.<strong>,javax.</strong></code></p></li></ul></div></div></section><section id="_performance" class="bonuscontent"><h2>Performance</h2><div class="slide-content"><div class="ulist"><div class="title">Compact Strings <span class="jep"><a href="https://openjdk.java.net/jeps/254">JEP 254</a></span></div><ul><li><p>Use ISO-8869-1 (1 byte/character) when possible</p></li></ul></div>
 <div class="ulist"><div class="title">Garbage Collector G1 <span class="jep"><a href="https://openjdk.java.net/jeps/248">JEP 248</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/307">JEP 307</a></span></div><ul><li><p>Now default GC</p></li><li><p>Multi-threaded Full GCs</p></li><li><p>Minimzes Stop-the-world Pauses</p></li><li><p>Deduplicates String</p></li></ul></div>
-<div class="ulist"><div class="title">Epsilon GC</div><ul><li><p>No-Op Garbage Collector (short-living JVMs)</p></li></ul></div></div></section></section>
-<section><section id="_java_14_beyond" class="lightbg" data-background-video="videos/prediction.mp4" data-background-video-loop data-background-opacity="1"><h2>Java 14 &amp; beyond</h2></section><section id="_project_metropolis"><h2>Project Metropolis</h2><div class="slide-content"><div class="imageblock" style=""><img src="images/graalvm-architecture.png" alt="GraalVM ecosystem"></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Polyglot VM: Execute multiple language with zero overhead</p></li><li><p>Can run in multiple environments; Can produce native images</p></li><li><p>Zero-overhead interop</p></li></ul></div></aside></div></section><section id="_graalvmpolyglot_vm_jep_243_jep_246_jep_295"><h2>GraalVM&#8201;&#8212;&#8201;Polyglot VM <span class="jep"><a href="https://openjdk.java.net/jeps/243">JEP 243</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/246">JEP 246</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/295">JEP 295</a></span></h2><div class="slide-content"><div class="openblock col2"><div class="content"><div class="ulist"><ul><li><p><strong>Ahead-of time compiler</strong> (AoT)</p></li><li><p>Generic VM<br>
- for <strong>different languages</strong><br>
-→ <em>JVM</em> (Java, Kotlin, Scala, …)<br>
-→ <em>LLVM</em> (C, C++) → native<br>
-→ <em>Java</em> Script, Python, Ruby, R</p></li></ul></div></div></div>
-<div class="openblock col2"><div class="content"><div class="ulist"><ul><li><p>Shared Runtime → Zero overhead for language interop</p></li><li><p><strong>Native executables</strong><br>
-(GraalVM on SubstrateVM)<br>
-→ Much smaller startup &amp; memory</p></li></ul></div></div></div>
-<div class="openblock clear decent"><div class="content"><div class="paragraph"><div class="title">AoT can be used today:</div><p><span class="x-small"><code>java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler</code></span></p></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>Multiple parts:</p><div class="ulist"><ul><li><p>AoT Compiler</p></li><li><p>Graal VM / Substrate VM as runtime</p></li></ul></div></li><li><p>AoT → improved startup time vs. JIT</p></li><li><p>Limitations: Dynamic (Reflection); highly experimental</p></li><li><p>AoT Compile can be used today</p></li></ul></div></aside></div></section><section id="_simplyfing_syntax_amber"><h2>Simplyfing Syntax: Amber</h2><div class="slide-content"><div class="listingblock"><div class="title">Pattern matching for <code>instanceof</code> <span class="jep"><a href="https://openjdk.java.net/jeps/305">JEP 305</a></span></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">if (obj instanceof String s) {
-    return s.contains("abc")
-}</code></pre></div></div>
-<div class="listingblock"><div class="title">Unamed lamda parameters <span class="jep"><a href="https://openjdk.java.net/jeps/302">JEP 302</a></span></div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">(i, _) -&gt; String.valueOf(i);</code></pre></div></div>
-<div class="listingblock"><div class="title">Data Classes &amp; Sealed Types</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">record Point(int x, int y) { }</code></pre></div></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="https://openjdk.java.net/projects/amber/">OpenJDK Project Amber</a></p></li><li><p><a href="https://cr.openjdk.java.net/~briangoetz/amber/datum.html">Data Classes and Sealed Types for Java</a></p></li></ul></div></div></div></div></section><section id="_value_types_valhalla"><h2>Value Types: Valhalla</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>JVM infrastructure for working with <strong>immutable</strong> and <strong>reference-free</strong> objects,
-for efficient by-value computation with non-primitive types.</p></div></blockquote></div>
-<div class="openblock tgap"><div class="content"><div class="listingblock"><div class="title">Value Object: Immutable &amp; Final</div>
-<div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">value class Rectangle { int width,height; }</code></pre></div></div></div></div>
-<div class="openblock decent tgap small"><div class="content"><div class="paragraph"><p><em>t(L1(/L2 Cache)</em> &lt;&lt; <em>t(RAM)</em>: → Similar performance to primitives<br>
-Benefits of immutables: Functional-style computations, shareability, …</p></div></div></div>
-<div class="openblock refs"><div class="content"><div class="ulist"><ul><li><p><a href="https://openjdk.java.net/projects/valhalla/">OpenJDK Valhalla</a></p></li></ul></div></div></div></div></section><section id="_loom_fibers_continuations"><div class="slide-content"><div class="paragraph"><p><span class="image"><img src="images/loom_banner1.png" alt="Loom: Fibers &amp; Continuations"></span></p></div>
-<div class="openblock col3-l"><div class="content"><div class="ulist"><div class="title">Lightweight concurrency</div><ul><li><p>Continuations</p></li><li><p>Fibers (JVM „threads“)</p></li><li><p>Tail-call elimination</p></li></ul></div></div></div>
-<div class="openblock col3-cr"><div class="content"><div class="listingblock source small"><div class="content"><pre class="highlightjs highlight"><code data-lang="java" class="language-java hljs" data-noescape="true">Continuation cont = new Continuation(SCOPE, () -&gt; {
-    while (true) {
-        System.out.println("before");
-        Continuation.yield(SCOPE);
-        System.out.println("after");
-    }
-});
-
-while (!cont.isDone()) {
-    cont.run();
-}</code></pre></div></div>
-<div class="paragraph"><p><span class="decent xx-small">Similar to cooperative multitasking or Kotlin&#8217;s Coroutines…</span></p></div></div></div>
-<aside class="notes"><div class="ulist"><ul><li><p>User-mode "threads": No real theads &amp; overhead</p></li><li><p>Continuations / Cooperative Multitasking: Tasks indicate when they want togive up control</p></li><li><p>Easily scales to 100.000 of parallel tasks</p></li></ul></div></aside></div></section></section>
-<section id="_bottom_line" data-background-image="images/tweet-jdk-evolving.png"><div class="slide-content"><aside class="notes"><div class="ulist"><ul><li><p>Geändertes Modell hat das Potential schnellere Features auch im Einsatz zu sehen
-Generell: <strong>„Neuer Wind“ = Gute &amp; überfällige Sache</strong>:</p><div class="olist arabic"><ol class="arabic"><li><p>Java wird wieder moderner. Die JVM war immer zeitgemäß</p></li><li><p>Schnellere Änderungen; <strong>Kampf gegen: "Java das neue COBOL!"</strong></p></li></ol></div></li><li><p>Try to get on the release train now!  <strong>Just run: It might just work</strong></p></li><li><p>Many things devs want. But how convince management? → <strong>Saving Money!</strong> (Performance, Licence, Recruiting)</p></li><li><p>Adress compiler warnings: More seriously. Deprecation warnings will become true!</p></li></ul></div></aside></div></section>
-<section><section id="_resources" class="lightbg" data-background-video="videos/industrial.mp4" data-background-video-loop data-background-opacity="0.6"><h2>Resources</h2><div class="slide-content"><div class="openblock col3-l xx-small"><div class="content"><div class="ulist"><div class="title">References</div><ul><li><p><a href="https://github.com/marchof/java-almanac">JDK API Changes Java Almanac</a></p></li><li><p><a href="https://chriswhocodes.com/vm-options-explorer.html">VM Options Explorer for HotSpot, Graal, OpenJ9, Xing</a></p></li></ul></div>
-<div class="ulist"><div class="title">Articles</div><ul><li><p><a href="https://medium.com/@javachampions/java-is-still-free-2-0-0-6b9aa8d6d244">Java is Still Free 2.0.3</a></p></li><li><p><a href="https://blogs.oracle.com/java-platform-group/oracle-jdk-releases-for-java-11-and-later">Oracle Blog: Oracle JDK</a></p></li><li><p><a href="https://www.pluralsight.com/guides/getting-started-with-jshell-part-2">Getting Started with <code>jshell</code> Part 2 &amp; 3</a></p></li></ul></div>
-<div class="ulist"><div class="title">OpenJDK Suppliers</div><ul><li><p><a href="https://adoptopenjdk.net/">AdoptOpenJDK</a>
-<a href="https://access.redhat.com/articles/1299013">Red Hat</a>
-<a href="https://aws.amazon.com/corretto/">Amazon Corretto</a>,
-<a href="https://github.com/alibaba/dragonwell8">Alibaba</a>,
-<a href="https://www.azul.com/products/zulu-enterprise/">Azul Zulu</a>,
-<a href="https://github.com/SAP/SapMachine">SAP</a>,
-<a href="https://www.ibm.com/marketplace/support-for-runtimes">IBM</a>,
-<a href="https://bell-sw.com/java.html">BellSoft</a>,
-<a href="https://www.jclarity.com/">jClarity</a></p></li></ul></div>
-<div class="ulist"><div class="title">Tools</div><ul><li><p><a href="https://www.graalvm.org/">GraalVM</a></p></li><li><p><a href="http://jdk.java.net/jmc/">Flight Recorder/Mission Control Center (EAP)</a></p></li></ul></div></div></div><div class="openblock col3-c xx-small"><div class="content"><div class="ulist"><div class="title">Contact</div><ul><li><p>Twitter <a href="https://twitter.com/bentolor"><strong>@bentolor</strong></a></p></li><li><p>Email: <a href="mailto:benjamin.schmid@exxcellent.de">benjamin.schmid@exxcellent.de</a></p></li></ul></div>
-<div class="ulist"><div class="title">Sources</div><ul><li><p><span class="icon"><i class="fa fa-code-branch fa-Github"></i></span> <a href="https://github.com/bentolor/java9to13"><strong>GitHub Repo with Source Code Examples &amp; Slide Sources</strong></a></p></li></ul></div>
-<div class="ulist"><div class="title">Image &amp; Video Source</div><ul><li><p><a href="https://de.freeimages.com/photographer/s_lim363-49742">Background image</a>,
-<a href="https://www.pexels.com/video/a-bee-on-a-yellow-flower-2048452/">Flowers</a>, <a href="https://www.pexels.com/video/relaxing-at-the-beach-1449880/">Relaxing at the beach</a>, <a href="https://www.pexels.com/video/cup-of-coffee-on-top-of-coffee-beans-855414/">Coffee Beans</a>, <a href="https://www.pexels.com/video/close-up-video-of-a-woman-studying-855418/">Woman studying</a>, <a href="https://www.pexels.com/video/white-keyboard-2219383/">White keyboard</a>, <a href="https://www.pexels.com/video/jack-hammering-pavement-855956/">Jackhammer</a>, <a href="https://www.pexels.com/video/globe-plasma-light-1192113/">Plasma Light</a>, <a href="https://www.pexels.com/video/heavy-equipment-loading-cement-2073130/">Industrial Site</a></p></li></ul></div></div></div><div class="openblock col3-r small"><div class="content"><div class="paragraph"><p><strong>These slides with all links</strong>
-<span class="image"><img src="images/bentolor-java913-url-qrcode.png" alt="https://bentolor.github.io/java9to13/"></span><br>
-<span class="emphasize"><strong><a href="https://bit.ly/2KPvyZh" class="bare">https://bit.ly/2KPvyZh</a></strong></span></p></div></div></div></div></section><section id="_cleanups" class="bonuscontent"><h2>Cleanups</h2><div class="slide-content"><div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">JDK: Cleanup</div><ul><li><p><strong>Java EE removed</strong></p></li><li><p><strong>CORBA removed</strong></p></li><li><p>Internal API’s (<code>sun.*</code>) removed / deprecated</p></li><li><p><code>apple.applescript</code> &amp; <code>com.apple</code> removed</p></li><li><p>Disable X.509/SHA-1 certificate chains</p></li><li><p>Remove Launch-Time JRE Version Selection directives</p></li><li><p><strong>Removed <code>Thread.destroy()</code> and <code>Thread.stop()</code></strong></p></li><li><p>Deprecate Applet API</p></li><li><p>Deprecate Nashorn Javascript Engine</p></li><li><p><strong>Deprecate Object.finalize()</strong></p></li></ul></div></div></div>
-<div class="openblock col2 x-small"><div class="content"><div class="ulist"><div class="title">Language: Cleanup</div><ul><li><p><code>var</code> &amp; <code>_</code> no longer a valid identifier</p></li></ul></div>
-<div class="ulist"><div class="title">Tooling/JVM: Cleanup</div><ul><li><p>Remove <code>jhat</code></p></li><li><p>Remove hprof Agent</p></li><li><p>Remove old GC Combinations</p></li><li><p>Remove <code>javah</code></p></li><li><p>Remove <code>lib/endorsed</code>  &amp; <code>lib/ext</code></p></li><li><p><strong>Replace rt.jar</strong></p></li><li><p>ResourceBundle loads properties files in UTF-8 instead of ISO-8859-1</p></li><li><p>Deprecate CMS GC</p></li><li><p>Deprecate Pack200</p></li></ul></div></div></div></div></section><section id="_security_tls_crypto" class="bonuscontent"><h2>Security / TLS / Crypto</h2><div class="slide-content"><div class="ulist"><ul><li><p>Validate Incoming Serialization Data
-JDK 9</p></li><li><p>Default keystore type is the standard PKCS12 instead of the proprietary JKS
-JDK 9</p></li><li><p>Default set of root Certification Authority (CA) certificates are provided with the JDK, so TLS connections are working out of the box
-JDK 10</p></li><li><p>DRBG-Based SecureRandom
-JDK 9</p></li><li><p>Disable X.509 certificate chains with SHA-1 based signatures
-JDK 9</p></li><li><p>SHA-3 Hash Algorithms
-JDK 9</p></li><li><p>TLS 1.3 support
-JDK 11</p></li><li><p>API for Datagram Transport Layer Security (DTLS)
-JDK 9</p></li><li><p>OCSP stapling TLS to improve performance of certificate status checking
-JDK 9</p></li><li><p>TLS Application-Layer Protocol Negotiation (ALPN) Extension which enables protocol negotiation without additional round trips; ALPN is a requirement for HTTP/2 connections
-JDK 9</p></li><li><p>Key Agreement with Curve25519 and Curve448
-JDK 11</p></li><li><p>ChaCha20 and Poly1305 Cryptographic Algorithms
-JDK 11</p></li></ul></div></div></section><section id="_internationalization" class="bonuscontent"><h2>Internationalization</h2><div class="slide-content"><div class="ulist"><ul><li><p>ResourceBundle loads properties files <em>by default</em> in UTF-8 instead of ISO-8859-1.<br>
-Overide via system property <code>java.util.PropertyResourceBundle.encoding</code> <span class="jep"><a href="https://openjdk.java.net/jeps/226">JEP 226</a></span></p></li><li><p>Unicode 10.0, adding roughly 27.000 characters, 10 blocks, and more than 30 scripts. <span class="jep"><a href="https://openjdk.java.net/jeps/267">JEP 267</a></span> <span class="jep"><a href="https://openjdk.java.net/jeps/327">JEP 327</a></span></p></li><li><p>java.util.Locale and related APIs support currency type, time zone and more. <span class="jep"><a href="https://openjdk.java.net/jeps/314">JEP 314</a></span></p></li><li><p><code>Locale</code>-specific operations now uses by default data provided by Unicode, no longer Oracle-provided. <span class="jep"><a href="https://openjdk.java.net/jeps/252">JEP 252</a></span></p></li></ul></div></div></section><section id="_graphics_and_desktop_applications" class="bonuscontent"><h2>.Graphics and Desktop Applications</h2><div class="slide-content"><div class="ulist"><ul><li><p>Desktop features for all platforms like login/logout/lock event listener and task bar interactions
-JDK 9</p></li><li><p>MultiResolutionImage that makes easy to retrieve a resolution-specific image for a DPI
-JDK 9</p></li><li><p>HiDPI Graphics on Windows and Linux
-JDK 9 <a href="https://openjdk.java.net/jeps/263" class="bare">https://openjdk.java.net/jeps/263</a></p></li><li><p>Enable GTK 3 on Linux for JavaFX, Swing, and AWT
-JDK 9 <a href="https://openjdk.java.net/jeps/283" class="bare">https://openjdk.java.net/jeps/283</a></p></li><li><p>Replace @beaninfo Javadoc tags with @BeanInfo annotations for Swing
-JDK 9</p></li><li><p>Update GStreamer included in JavaFX/Media to version 1.4.4
-JDK 9</p></li><li><p>Replace the existing ICU OpenType font-layout engine with HarfBuzz
-JDK 9</p></li></ul></div>
+<div class="ulist"><div class="title">Epsilon GC</div><ul><li><p>No-Op Garbage Collector (short-living JVMs)</p></li></ul></div>
 <script src="./live.js"></script>
 
 <!-- hide "verbatim" sections if URL contains "terse"-Keyword -->

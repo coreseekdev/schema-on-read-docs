@@ -31,357 +31,159 @@
 --
 
 === 字段类型
-[source,java]
-----
-// var wontCompile; <1>
-// var wontCompile = null;
-// var wontCompile = {-1, 1};
 
-var myMap = new HashMap<>();
-myMap.put(42, "The answer");
-// var wontCompile = myMap.get(42).trim(); <2>
-
-// var wontCompile = String::toUpperCase; <3>
-
-var myPredicate = new IntPredicate() {
-    public boolean test(int value) {  return value > 0; }  };
-// myPredicate = (int i) -> (i % 2) == 0; <4>
-----
-
-<1> Type _must be inferrable_ – no late init, `null` or array literals
-<2> Type _inferred at declaration_ time: `Map<Object, Object>`
-<3> _Method references_ must be explicit
-<4> _Anonymous Types_ are types-per-instance; therefore no reassignment
-
-[.notes]
+[.col2.x-small]
 --
-* Type _must be inferrable_ – no late init, `null` or array literals
-* Type _inferred at declaration_ time: `Map<Object, Object>`
-* _Method references_ must be explicit
-* _Anonymous Types_ are types-per-instance; therefore no reassignment
+.Logic 
+* Document ID
+* Text
+* String
+* Integer
+* Big Integer
+* Timestamps
+* Float
+* JSON
+* Multi-value integer
+* Multi-value big integer
 --
 
-
-
-[.bonuscontent]
-=== Lambda Type inference [jep]#https://openjdk.java.net/jeps/323[JEP 323]#
-
-[source,java]
-----
-// JDK8
-MyLambda myLambda = (x, y) -> x + ((y != null) ? y : 0);
-myLambda = (Long x, @NotNull Long y) -> x + y;
-
-// JDK11: `var` style → type infer with annotations
-myLambda = (var x, @NotNull var y) -> x + y;
-----
-
-=== Type inference: Styleguide
-
-video::../videos/type-infer-styleguide.mp4[Style Guidelines for Local Variable Type Inference in Java]
-
-[.refs]
+[.col2.x-small]
 --
-* http://openjdk.java.net/projects/amber/LVTIstyle.html[Style Guidelines for Local Variable Type Inference in Java]
---
-
-[.notes]
---
-* May hide things: Project wrote a styleguide with recommendations
-* Don't make source-code reading a puzzle
+.SQLDataSource
+* sql_attr_bigint
+* sql_attr_bool
+* sql_attr_float
+* sql_attr_json
+* **sql_attr_multi**
+* sql_attr_string
+* sql_attr_timestamp
+* sql_attr_uint
+* <field>
+** sql_field_string
+** sql_file_field
+** sql_joined_field
 --
 
 
+=== 导入数据  / Indexer
 
-=== Milling Project Coin [jep]#https://openjdk.java.net/jeps/213[JEP 213]#
-
-.Try-with-resources now support „effectively final“ variables
-//InputStream inputStream = new FileInputStream(".gitignore");
-//try (Closeable closeAfterTry = inputStream) { … }
-//
-// JDK9+: simply refer to effectively-final Closeables
-[source,java]
-----
-var inputStream = new FileInputStream(".gitignore");
-try (inputStream) { … }
-----
-
-[.tgap.fragment]
+[.col2.x-small]
 --
-.Private methods in Interfaces
-[source,java]
+.manticore.conf 
 ----
-interface Version {
-    byte[] digits();
-    default String text() { return text(digits()); }
-    private String text(byte[] version) { … }
+source src1
+{
+    type                    = mysql
+    sql_host                = localhost
+    sql_user                = test
+    sql_pass                =
+    sql_db                  = test
+    sql_port                = 3306  # optional, default is 3306
+    sql_query               = \
+        SELECT id, group_id, \
+        UNIX_TIMESTAMP(date_added) AS date_added, \
+        title, content \
+        FROM documents
+    sql_attr_uint           = group_id
+    sql_attr_timestamp      = date_added
+}
+
+index test1
+{
+    source                  = src1
+    path                    = /var/lib/manticore/data/test1
+    min_infix_len   = 3
 }
 ----
-
-[verydecent]#Allows default methods share common code#
 --
 
-
-[.notes]
+[.col2.x-small]
 --
-Milling Project Coin: A long runner project. Continously delivering small enhancement changes to Java
---
-
-
-[.bonuscontent%notitle]
-=== Milling Project Coin
-.Diamond operator for anonymous inner classes
-[source,java]
+.CLI
 ----
-Comparator<Integer> compareLongs = new Comparator<>() { … }
-----
-
-[.tgap.fragment]
---
-.`@SafeVargs` on private instance methods
-[source,java]
-----
-private List<String> safeVarargsMethod(List<String>... lists) { … }
+$ indexer test1  --rotate
+using config file '/etc/sphinxsearch/manticore.conf'...
+indexing index 'test1'...
+collected 4 docs, 0.0 MB
+sorted 0.0 Mhits, 100.0% done
+total 4 docs, 193 bytes
+...
 ----
 --
 
-[.refs]
+=== Plain Index Building
+
+image:diagram-indexstage.png[Index Stage]
+
+=== 导入数据 / RT Index
+
+[.col2.x-small]
 --
-* (1) https://www.javaworld.com/article/3169388/java-9s-other-new-enhancements-part-2.html[Java 9's other new enhancements, Part 2: Milling Project Coin]
---
-
-
-
-
-=== Preview features [preview]#Preview# [version]#12#
-
-[.col2]
---
-[source,bash]
-.Unlock Compilation
+.sql
+[source,SQL]
 ----
-javac --release xx --enable-preview
+mysql> CREATE TABLE myindex \
+(title text, content text, category_id integer);
 ----
---
-
-[.col2]
---
-[source,bash]
-.Unlock Execution
+.manticore.conf 
 ----
-java --enable-preview …
-----
---
-
-[.clear]
---
-{sp} +
-[decent]#`xx` must _exactly_ match used JDK version#
---
-
-[.notes]
---
-* New in Java 12
-* Allow to preview/use features.
-* Forces awareness by using toggle switch on _compiling and running_
---
-
-
-
-[transition="fade-out"]
-=== `switch` in Java 8
-
-[source,java]
-----
-    enum Direction {N, S, W, E}
-
-    String switchExpressionJDK8(Direction way) {
-        String result;
-        switch (way) {
-            case N:
-                result = "Up";
-                break;
-            case S:
-                result = "Down";
-                break;
-            case E:
-            case W:
-                result = "Somewhere left or right";
-                break;
-            default:
-                throw new IllegalStateException("Huh?: " + way);
-        }
-        return result;
-    }
-----
-[.notes]
---
-* Error-prone
-** forget `break`
-** must have a `default`
-* Clumsy: Temporary assign a variable
---
-
-[transition="fade-in"]
-=== Switch-Expression [jep]#https://openjdk.java.net/jeps/325[JEP 325]# [version]#12# [jep]#https://openjdk.java.net/jeps/354[JEP 354]# [version]#13# [preview]#Preview#
-
-[source,java]
-----
-String switchExpressionPreview13(Direction way) {
-    return switch (way) {                         <1>
-        case N -> "Up";                           <2>
-        case S -> { yield "Down"; }               <3>
-        case E, W -> "Somewhere left or right";
-        // default -> "Foo"                       <4>
-    };
+index rt
+{
+    type = rt
+    path = /var/lib/manticore/data/testrt
+    rt_field = title
+    rt_field = content
+    rt_attr_uint = gid
+            stored_fields = title, content
 }
 ----
-
-<1> `switch` can be used as expression
-<2> `->` instead of `:` → no `break;` necessary!
-<3> Lambdas can be used to. For _expressions_ they must `yield` a value [version]#13#
-<4> `default` can be ommitted if a) no expression or b) `enum` with every value handled
-
-
-
-[.notes]
---
-* Preview kommt durchaus zum Einsatz:  Switch-Expression wurde mit Java 12 eingeführt und in Java 13 verändert.
-
-* `switch` can be used as expression
-* `->` instead of `:` → no `break;` necessary!
-* Lambdas can be used to. For _expressions_ they must `yield` a value [version]#13#
-+ `default` can be ommitted if a) no expression or b) `enum` with every value handled
 --
 
-
-=== Text Blocks [jep]#https://openjdk.java.net/jeps/355[JEP 355]# [version]#13# [preview]#Preview#
-
-[.col2]
+[.col2.x-small]
 --
-.Java 8
-[source,java]
+.CLI
+[source,SQL]
 ----
-Object obj = engine.eval(
-    "function hello() {\n" +
-    "   print(\"Hi, world!\");\n" +
-    "}\n" +
-    "\n"  +
-    "hello();\n"
-    );
+mysql> INSERT INTO testrt VALUES \
+    ( 1, 'first record', 'test one', 123 );
+Query OK, 1 row affected (0.05 sec)
+
+mysql> INSERT INTO testrt VALUES \
+    ( 2, 'second record', 'test two', 234 );
+Query OK, 1 row affected (0.00 sec)
+
+mysql> SELECT * FROM testrt WHERE MATCH('first one');
++------+------+--------------+----------+
+| id   | gid  | title        | content  |
++------+------+--------------+----------+
+|    1 |  123 | first record | test one |
++------+------+--------------+----------+
+
+mysql> FLUSH RAMCHUNK testrt;
+Query OK, 0 rows affected (0.05 sec)
+
+mysql> OPTIMIZE INDEX testrt;
+Query OK, 0 rows affected (0.00 sec)
 ----
 --
 
-[.col2]
---
-.Java 13
-[source,java]
+=== 导入数据 / RT Index / Batch
+
+[source,SQL]
 ----
-Object obj = engine.eval("""
-    function hello() {
-       print("Hi, world!");
-    }
+DROP TABLE IF EXISTS test.documents;
+CREATE TABLE test.documents
+(
+     id                      INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+     group_id        INTEGER NOT NULL,
+     date_added      DATETIME NOT NULL,
+     title           VARCHAR(255) NOT NULL,
+     content         TEXT NOT NULL
+);
 
-    hello();
-    """);
+INSERT INTO test.documents ( id, group_id,  date_added, title, content ) VALUES
+     ( 1, 1, NOW(), 'test one', 'this is my test document number one. also checking search within phrases.' ),
+     ( 2, 1, NOW(), 'test two', 'this is my test document number two' ),
+     ( 3, 2, NOW(), 'another doc', 'this is another group' ),
+     ( 4, 2, NOW(), 'doc number four', 'this is to test groups' );
 ----
---
-
-[.small.decent]
---
-* Leading space-Character identation removed +
-  up to the most-left character in the block including the closing `"""`
-* Normalizes line-endings to `\n` and removes all trailing white spaces
---
-
-[.notes]
---
---
-
-
-
-=== Jigsaw [jep]#https://openjdk.java.net/jeps/201[JEP 201]#
-> Modules bundle together one or more packages
-> and offer stronger encapsulation than jars
-
-- Allows **scaled-down runtime**  &rarr; IoT & Container
-- **Stronger:** `public` invisible to other modules
-- _Sad:_ No module versioning
-
-// - Module list & `.jmod` replace Classpath & `.jar`
-// - Metadata compiled from `module-info.java`
-
-[.notes]
---
-* Only briefly: Most of you will know
-* *1 package = 1 module*
---
-
-
-[%notitle,transition="fade-out"]
-=== Jigsaw
-
-.Metadata: `/module-info.java`:
-[source,java]
-----
-module com.mysql.jdbc {
-    requires java.sql;             // Module dependency
-    exports com.mysql.jdbc;        // Export module package → enables access
-    provides java.sql.Driver       // SPI: Provide service instance
-        with com.mysql.jdbc.Driver;
-}
-----
-
-[.tgap.fragment]
---
-.Jigsaw uses modules & `.jmod` instead of Classpath & `.jar`
-----
-javac -mp modulepath ...
-java  -mp modulepath -m modulename/moduleclass
-----
---
-
-[.notes]
---
-* Metadata described in `module-info.java`
-* *Either-Or!* You stay in classpath/JAR mode oder switch to modules /jmod
---
-
-[.bonuscontent]
-=== `ServiceLoader` & modules
-
-[source,java]
-----
-public abstract class BillingService {
-    public static BillingService getInstance() {
-        return ServiceLoader.load(BillingService.class)
-                .findFirst().orElseThrow();
-    }
-
-    public abstract String takeMyMoney();
-}
-----
-
-[source,java]
-----
-public class MastercardBillingService extends BillingService { … }
-----
-
-[source,java]
-----
-module anothermodule {
-    provides bentolor.BillingService
-       with bentolor.MastercardBillingService;
-}
-----
-
-→ Simply use via `BillingService.getInstance()`
-
-
-[%notitle,transition="fade-in"]
-=== Jigsaw: Conclusion
-
-"It is too early to say whether modules will achieve widespread
-use outside of the JDK itself. In the meantime, it seems best to
-avoid them unless you have a compelling need."
--- Joshua Bloch, Effective Java: Third Edition (2018)
