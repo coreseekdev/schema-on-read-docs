@@ -17,6 +17,8 @@
 ** 写入速度为 `plain` 的 `1/3`
 * Percolate index 
 ** 输入文档，检索匹配的查询
+* Template index
+** 用于文档高亮等，不实际存储数据
 --
 
 [.col2.x-small]
@@ -55,6 +57,7 @@
 * sql_attr_float
 * sql_attr_json
 * **sql_attr_multi**
+* **sql_attr_multi64**
 * sql_attr_string
 * sql_attr_timestamp
 * sql_attr_uint
@@ -70,6 +73,7 @@
 [.col2.x-small]
 --
 .manticore.conf 
+[source]
 ----
 source src1
 {
@@ -100,6 +104,7 @@ index test1
 [.col2.x-small]
 --
 .CLI
+[source]
 ----
 $ indexer test1  --rotate
 using config file '/etc/sphinxsearch/manticore.conf'...
@@ -127,6 +132,7 @@ mysql> CREATE TABLE myindex \
 ----
 .manticore.conf 
 ----
+[source]
 index rt
 {
     type = rt

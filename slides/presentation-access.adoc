@@ -12,6 +12,7 @@
 
 [.source.col2,php]
 .API
+[source, PHP]
 ----
 require ( "sphinxapi.php" );
 $cl = new SphinxClient ();
@@ -39,6 +40,7 @@ $res = $cl->RunQueries();
 [.col2.x-small]
 --
 .API
+[source, PHP]
 ----
 <?php
 
@@ -54,6 +56,7 @@ if ( !mysqli_multi_query ( $link, $batch ) )
 ...
 ----
 .VIP
+[source]
 ----
 searchd {
   listen = 127.0.0.1:9306:mysql

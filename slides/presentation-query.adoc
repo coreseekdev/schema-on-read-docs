@@ -30,22 +30,26 @@
 
 === Extended query syntax
 
-[.col2.x-small]
+[.col3-l.xx-small]
 --
 .OR
+[source]
 ----
 hello | world
 ----
 .MAYBE
+[source]
 ----
 hello MAYBE world
 ----
 .NOT
+[source]
 ----
 hello -world
 hello !world
 ----
 .field search
+[source]
 ----
 @title hello @body world
 @body[50] hello
@@ -54,54 +58,68 @@ hello !world
 @!(title,body) hello world
 @* hello
 ----
+--
+
+[.col3-c.xx-small]
+--
 .phrase 
+[source]
 ----
 "hello world"
 ----
 .proximity 
+[source]
 ----
 "hello world"~10
 ----
 .quorum matching
+[source]
 ----
 "the world is a wonderful place"/3
 ----
---
-
-[.col2.x-small]
---
 .strict order 
+[source]
 ----
 aaa << bbb << ccc
 ----
 .exact form 
+[source]
 ----
 raining =cats and =dogs
 ----
+--
+
+[.col3-r.xx-small]
+--
 .field-start and field-end
+[source]
 ----
 ^hello world$
 ----
-.keyword IDF boost 
+.keyword IDF boost
+[source] 
 ----
 boosted^1.234 boostedfieldend$^1.234
 ----
 .NEAR / SENTENCE / PARAGRAPH 
+[source]
 ----
 hello NEAR/3 world NEAR/4 "my test"
 all SENTENCE words SENTENCE "in one sentence"
 "Bill Gates" PARAGRAPH "Steve Jobs"
 ----
 .NOTNEAR
+[source]
 ----
 Church NOTNEAR/3 street
 ----
-
 --
 
 === Extended query syntax / ZONE
 
 * 默认为 HTML / XML 文档设置，需要显式开启
+
+[source]
 ----
 index_zones = h*, th, title
 ----
@@ -109,6 +127,7 @@ index_zones = h*, th, title
 * 与字段查询类似，但是不要求在同一个zone 中
 * 目前需要开启 posting position.
 
+[source]
 ----
 (ZONE:th hello world)
 ----
@@ -119,6 +138,10 @@ index_zones = h*, th, title
 .Basic Query
 ----
 mysql> SELECT * FROM test_index WHERE MATCH ('pile box') AND channel_id<1000 GROUP BY group_id;
+mysql> SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
+mysql> SELECT * FROM test WHERE tags ALL('foo', 'bar', 'fake');
+mysql> SELECT id, PACKEDFACTORS() FROM test1 \
+       WHERE MATCH('test one') OPTION ranker=expr('1');
 ----
 
 [source,SQL]
