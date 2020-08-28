@@ -29,8 +29,8 @@ TIP: 其中 master.zip 与 re2_master.zip 是一个文件
 
 [source, bash, indent=5]
 ----
-sudo apt install build-essential libssl-dev libasio-dev \
-    libboost-system-dev  libmysqlclient-dev flex bison libpcre3-dev \
+sudo apt install build-essential libssl-dev \
+    libmysqlclient-dev flex bison libpcre3-dev \
     libzstd-dev 
 ----
 
@@ -41,7 +41,7 @@ sudo apt install build-essential libssl-dev libasio-dev \
 ----
 cmake ../manticoresearch -DLIBS_BUNDLE=../manticore_bundle \
 -DWITH_ICONV=OFF -DWITH_RE2=1 -DWITH_MYSQL=1 \
--DCMAKE_BUILD_TYPE=DEBUG \
+-DCMAKE_BUILD_TYPE=DEBUG -DBoost_NO_SYSTEM_PATHS=TRUE -DBoost_NO_BOOST_CMAKE=TRUE \
 -DCMAKE_CXX_FLAGS="-Wno-error=stringop-truncation -Wno-error=deprecated-copy"
 ----
 
